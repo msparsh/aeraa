@@ -5,8 +5,11 @@ part of 'main.dart';
 class Core {
   Map<int, TaskItem> items = {};
   Map<int, TaskItem> archive = {};
+  Map<String, String> aliases = {};
   int _nextId = 1;
   final StorageService _storage = StorageService();
+
+  Timer? _saveTimer;
 
   static const cRed = Color(0xFFE06C75);
   static const cPurple = Color(0xFFC678DD);
@@ -22,6 +25,9 @@ class Core {
     if (data != null) {
       if (data['items'] != null) items = _decodeMap(data['items']);
       if (data['archive'] != null) archive = _decodeMap(data['archive']);
+      if (data['aliases'] != null) {
+        aliases = Map<String, String>.from(data['aliases'] as Map);
+      }
     }
     _refreshNextId();
   }
@@ -48,9 +54,22 @@ class Core {
   }
 
   void _save() {
+    _saveTimer?.cancel();
+    _saveTimer = Timer(const Duration(milliseconds: 500), () {
+      _storage.saveData({
+        'items': items.map((k, v) => MapEntry(k.toString(), v.toJson())),
+        'archive': archive.map((k, v) => MapEntry(k.toString(), v.toJson())),
+        'aliases': aliases,
+      });
+    });
+  }
+
+  void forceSaveImmediate() {
+    _saveTimer?.cancel();
     _storage.saveData({
       'items': items.map((k, v) => MapEntry(k.toString(), v.toJson())),
       'archive': archive.map((k, v) => MapEntry(k.toString(), v.toJson())),
+      'aliases': aliases,
     });
   }
 
@@ -223,7 +242,7 @@ class Core {
       }
 
       if (items.containsKey(id)) {
-        // Active -> Archive (plus all subtasks)
+        // Active -> Archive (plus all subtasks) 🗄️⬇️
         final toArchive = <int>{};
         void collect(int currentId) {
           if (!toArchive.add(currentId)) return;
@@ -236,17 +255,33 @@ class Core {
 
         for (var aId in toArchive) {
           final item = items.remove(aId);
-          if (item != null) archive[aId] = item; // Keep exact same ID!
+          if (item != null) archive[aId] = item; 
         }
         toggled.add('$id (archived)');
+        
       } else if (archive.containsKey(id)) {
-        // Archive -> Active
-        final item = archive.remove(id)!;
-        items[id] = item; // Keep exact same ID!
-
-        // If parent no longer exists in active items, unlink it
-        if (item.parentId != null && !items.containsKey(item.parentId)) {
-          item.parentId = null;
+        // Archive -> Active (plus all subtasks!) 🗂️⬆️
+        final toRestore = <int>{};
+        void collectRestore(int currentId) {
+          if (!toRestore.add(currentId)) return;
+          archive.values
+              .where((it) => it.parentId == currentId)
+              .forEach((c) => collectRestore(c.id));
+        }
+        
+        collectRestore(id);
+        
+        for (var rId in toRestore) {
+          final item = archive.remove(rId);
+          if (item != null) {
+            items[rId] = item; 
+            
+            // If the explicitly requested item has a parent that is STILL in the archive,
+            // we sever the tie so it becomes a root item on the active board. ✂️
+            if (rId == id && item.parentId != null && !items.containsKey(item.parentId)) {
+              item.parentId = null;
+            }
+          }
         }
         toggled.add('$id (restored)');
       } else {
@@ -255,9 +290,10 @@ class Core {
     }
 
     if (toggled.isEmpty)
-      return (error: true, msg: 'IDs not found: ${notFound.join(', ')}');
+      return (error: true, msg: 'IDs not found: ${notFound.join(', ')} 🤷♂️');
+      
     _save();
-    return (error: false, msg: 'Toggled archive state: ${toggled.join(', ')}');
+    return (error: false, msg: 'Toggled archive state: ${toggled.join(', ')} ✅');
   }
 
   ({bool error, String msg}) editItem(String idRaw, String newDesc) {
@@ -629,7 +665,7 @@ class Core {
   Widget getArchiveView() {
     if (archive.isEmpty)
       return const Text(
-        'Archive is empty.',
+        'Archive is empty. 🕸️',
         style: TextStyle(
           color: cDim,
           fontFamily: 'JetBrains Mono',
@@ -640,7 +676,7 @@ class Core {
 
     final spans = <InlineSpan>[
       const TextSpan(
-        text: 'ARCHIVE\n',
+        text: 'ARCHIVE\n\n',
         style: TextStyle(
           color: Color(0xFFEEEEEE),
           fontWeight: FontWeight.w600,
@@ -649,16 +685,18 @@ class Core {
       ),
     ];
 
-    for (var entry in archive.entries) {
-      final item = entry.value;
-      final type = item.isTask
-          ? (item.isComplete ? '[done]' : '[task]')
-          : '[note]';
-      final boards = item.boards.isNotEmpty ? item.boards.join(',') : '';
-      spans.add(
-        TextSpan(text: ' ${entry.key}. $type ${item.description}  $boards\n'),
-      );
+    // 👇 NEW: Only grab root tasks to prevent duplicating subtasks!
+    final rootArchivedItems = archive.values
+        .where((it) => it.parentId == null)
+        .toList()
+      ..sort((a, b) => a.id.compareTo(b.id));
+
+    for (var it in rootArchivedItems) {
+      // 👇 NEW: Pass the isArchive flag to get that sweet formatting!
+      spans.addAll(_formatItemLine(it, isArchive: true)); 
+      spans.add(const TextSpan(text: '\n'));
     }
+    
     if (spans.isNotEmpty) spans.removeLast();
 
     return _buildRichText(spans);
@@ -729,9 +767,13 @@ class Core {
     int indent = 0,
     List<String>? parentBoards,
     Set<int>? visited,
+    bool isArchive = false, // 👈 NEW: Tell it where to look for children!
   }) {
     final seen = visited ?? <int>{};
     seen.add(item.id);
+    
+    // 👈 NEW: Point to the correct pool based on the view
+    final pool = isArchive ? archive : items; 
 
     String prefix = '•';
     Color pColor = cBlue;
@@ -816,11 +858,11 @@ class Core {
       );
     }
 
-    final children =
-        items.values
-            .where((c) => c.parentId == item.id && !seen.contains(c.id))
-            .toList()
-          ..sort((a, b) => a.id.compareTo(b.id));
+    // 👇 UPDATED: Search the correct pool for children
+    final children = pool.values 
+        .where((c) => c.parentId == item.id && !seen.contains(c.id))
+        .toList()
+      ..sort((a, b) => a.id.compareTo(b.id));
 
     for (var child in children) {
       spans.add(const TextSpan(text: '\n'));
@@ -830,6 +872,7 @@ class Core {
           indent: indent == 0 ? 6 : indent + 4,
           parentBoards: parentBoards ?? item.boards,
           visited: seen,
+          isArchive: isArchive, // 👈 NEW: Pass the flag down the tree
         ),
       );
     }
@@ -891,5 +934,55 @@ class Core {
       pending: p,
       notes: n,
     );
+  }
+
+  ({bool error, String msg}) setAlias(List<String> args) {
+    if (args.isEmpty) {
+      if (aliases.isEmpty) return (error: false, msg: 'No aliases currently set. 📭');
+      return (error: false, msg: aliases.entries.map((e) => '${e.key} = "${e.value}"').join('\n'));
+    }
+    if (args.length < 2) {
+      return (error: true, msg: 'Usage: alias <name> <command> (or "alias <name> none" to remove)');
+    }
+
+    final aliasName = args[0].toLowerCase();
+    final commandStr = args.sublist(1).join(' ');
+
+    if (commandStr.toLowerCase() == 'none') {
+      if (aliases.remove(aliasName) != null) {
+        _save();
+        return (error: false, msg: 'Alias "$aliasName" removed 🗑️');
+      }
+      return (error: true, msg: 'Alias "$aliasName" not found 🤷‍♂️');
+    }
+
+    // Prevent overriding real commands to avoid chaotic loops 🛑
+    final reserved = {
+      'task', '-t', 'add',
+      'note', '-n',
+      'list', '-l', 'ls',
+      'board',
+      'timeline', '-i',
+      'archive', '-a', 'restore', '-r',
+      'check', '-c',
+      'begin', '-b',
+      'star', '-s',
+      'delete', '-d',
+      'sweep',
+      'edit', '-e',
+      'move', 'mv', '-m', 'm',
+      'sub', 'subtask',
+      'priority', '-p',
+      'due',
+      'help', '-h', '--help',
+      'alias'
+    };
+    if (reserved.contains(aliasName) || aliasName.startsWith('-')) {
+      return (error: true, msg: 'Cannot overwrite core system command "$aliasName" 🚫');
+    }
+
+    aliases[aliasName] = commandStr;
+    _save();
+    return (error: false, msg: 'Alias set! 🔗 $aliasName -> "$commandStr"');
   }
 }

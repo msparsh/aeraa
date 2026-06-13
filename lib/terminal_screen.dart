@@ -43,6 +43,7 @@ move / mv / -m id @board1 @board2 ...                  : move to board(s) (unlin
 tag id #tag1 [#tag2 ...]                               : toggle tag(s) on item
 priority / -p id [1|2|3]                               : cycle priority OR set to 1/2/3
 due id DD-MM-YYYY | none                               : set or remove due date
+alias name command                                     : create or remove a custom alias
 help / -h / --help                                     : show this menu''';
 
   @override
@@ -107,7 +108,7 @@ help / -h / --help                                     : show this menu''';
     );
   }
 
-  void _handleCommand(String raw) {
+  void _handleCommand(String raw, [Set<String>? visited]) {
     final trimmed = raw.trim();
     if (trimmed.isEmpty) {
       _addNode(widget: tb.getBoardView());
@@ -147,6 +148,26 @@ help / -h / --help                                     : show this menu''';
         ),
       ),
     );
+
+    // 👇 NEW: ALIAS INTERCEPTOR 🕵️‍♂️
+    // If the typed command matches an alias, swap it out and re-run!
+    if (tb.aliases.containsKey(mainCmd)) {
+      final activeVisited = visited ?? <String>{};
+      if (activeVisited.contains(mainCmd)) {
+        _addResponse('Error: Circular alias loop detected for "$mainCmd" 🔄');
+        return;
+      }
+      activeVisited.add(mainCmd);
+
+      final aliasedCmd = tb.aliases[mainCmd]!;
+      // Append any extra arguments the user passed after the alias
+      final extraArgs = tailArgs.isNotEmpty ? ' ${tailArgs.join(' ')}' : '';
+
+      // Recursively run the real command 🔁
+      _handleCommand('$aliasedCmd$extraArgs', activeVisited);
+      return; // Stop execution here for the original alias command
+    }
+    // 👆 END ALIAS INTERCEPTOR
 
     switch (mainCmd) {
       case 'help' || '-h' || '--help':
@@ -295,6 +316,10 @@ help / -h / --help                                     : show this menu''';
 
       case 'timeline' || '-i':
         _addNode(widget: tb.getTimelineView());
+
+      case 'alias':
+        final res = tb.setAlias(tailArgs);
+        _addResponse(res.error ? 'Error: ${res.msg}' : res.msg);
 
       default:
         _addResponse('Command not recognized: "$mainCmd"\n\n$_helpMenu');
