@@ -20,18 +20,12 @@ class Core {
   Future<void> init() async {
     final data = await _storage.loadData();
     if (data != null) {
-      if (data['items'] != null) {
-        items = _decodeMap(data['items']);
-      }
-      if (data['archive'] != null) {
-        archive = _decodeMap(data['archive']);
-      }
+      if (data['items'] != null) items = _decodeMap(data['items']);
+      if (data['archive'] != null) archive = _decodeMap(data['archive']);
     }
     _refreshNextId();
   }
 
-  /// Safely decodes a stored id->item map, skipping any malformed entries
-  /// instead of letting one bad record crash startup.
   Map<int, TaskItem> _decodeMap(dynamic raw) {
     final result = <int, TaskItem>{};
     if (raw is! Map) return result;
@@ -39,40 +33,31 @@ class Core {
       try {
         final id = int.parse(key.toString());
         result[id] = TaskItem.fromJson(value as Map<String, dynamic>);
-      } catch (_) {
-        // Skip corrupted entry rather than failing the whole load.
-      }
+      } catch (_) {}
     });
     return result;
   }
 
+  int _maxId(Map<int, dynamic> map) =>
+      map.isEmpty ? 0 : map.keys.reduce((a, b) => a > b ? a : b);
+
   void _refreshNextId() {
-    if (items.isEmpty && archive.isEmpty) {
-      _nextId = 1;
-    } else {
-      final maxItem = items.isEmpty
-          ? 0
-          : items.keys.reduce((a, b) => a > b ? a : b);
-      final maxArch = archive.isEmpty
-          ? 0
-          : archive.keys.reduce((a, b) => a > b ? a : b);
-      _nextId = (maxItem > maxArch ? maxItem : maxArch) + 1;
-    }
+    final mItems = _maxId(items);
+    final mArch = _maxId(archive);
+    _nextId = (mItems > mArch ? mItems : mArch) + 1;
   }
 
   void _save() {
-    final data = {
-      'items': items.map(
-        (key, value) => MapEntry(key.toString(), value.toJson()),
-      ),
-      'archive': archive.map(
-        (key, value) => MapEntry(key.toString(), value.toJson()),
-      ),
-    };
-    _storage.saveData(data);
+    _storage.saveData({
+      'items': items.map((k, v) => MapEntry(k.toString(), v.toJson())),
+      'archive': archive.map((k, v) => MapEntry(k.toString(), v.toJson())),
+    });
   }
 
   int _generateId() => _nextId++;
+
+  /// Helper to fetch an item and avoid repetitive parse checks.
+  TaskItem? _getItem(String idRaw) => items[int.tryParse(idRaw) ?? -1];
 
   ({int timestamp, String dateString}) _nowMeta() {
     final now = DateTime.now();
@@ -84,42 +69,46 @@ class Core {
 
   ({List<String> boards, int priority, String description, String? dueDate})
   _parseOptions(List<String> args) {
-    final boards = <String>[];
-    final desc = <String>[];
+    final boards = <String>[], descWords = <String>[];
     int priority = 1;
     String? dueDate;
 
     for (var t in args) {
+      final lower = t.toLowerCase();
       if (t.startsWith('@') && t.length > 1) {
         boards.add(t);
-      } else if (RegExp(r'^p:[123]$', caseSensitive: false).hasMatch(t)) {
-        priority = int.parse(t[2]);
-      } else if (RegExp(
-        r'^due:\d{2}-\d{2}-\d{4}$',
-        caseSensitive: false,
-      ).hasMatch(t)) {
+      } else if (lower.startsWith('p:') && t.length == 3) {
+        priority = int.tryParse(t[2])?.clamp(1, 3) ?? 1;
+      } else if (lower.startsWith('due:') &&
+          RegExp(r'^due:\d{2}-\d{2}-\d{4}$').hasMatch(lower)) {
         dueDate = t.substring(4);
       } else {
-        desc.add(t);
+        descWords.add(t);
       }
     }
 
     return (
       boards: boards.isEmpty ? ['inbox'] : boards,
       priority: priority,
-      description: desc.join(' ').trim(),
+      description: descWords.join(' ').trim(),
       dueDate: dueDate,
     );
   }
 
-  ({bool error, String msg, int? id}) createTask(List<String> args) {
-    if (args.isEmpty) {
-      return (error: true, msg: 'task description required', id: null);
-    }
+  ({bool error, String msg, int? id}) _createItem(
+    List<String> args, {
+    required bool isTask,
+  }) {
+    if (args.isEmpty)
+      return (
+        error: true,
+        msg: '${isTask ? 'task' : 'note'} description required',
+        id: null,
+      );
+
     final parsed = _parseOptions(args);
-    if (parsed.description.isEmpty) {
+    if (parsed.description.isEmpty)
       return (error: true, msg: 'empty description', id: null);
-    }
 
     final id = _generateId();
     final meta = _nowMeta();
@@ -127,41 +116,27 @@ class Core {
       id: id,
       description: parsed.description,
       boards: parsed.boards,
-      priority: parsed.priority,
-      dueDate: parsed.dueDate,
+      priority: isTask ? parsed.priority : 1,
+      dueDate: isTask ? parsed.dueDate : null,
       dateString: meta.dateString,
       timestamp: meta.timestamp,
-      isTask: true,
+      isTask: isTask,
     );
+
     _save();
     return (
       error: false,
-      msg: 'Created task [$id]: ${parsed.description}',
+      msg: 'Created ${isTask ? 'task' : 'note'} [$id]: ${parsed.description}',
       id: id,
     );
   }
 
-  ({bool error, String msg}) createNote(List<String> args) {
-    if (args.isEmpty) {
-      return (error: true, msg: 'note description required');
-    }
-    final parsed = _parseOptions(args);
-    if (parsed.description.isEmpty) {
-      return (error: true, msg: 'empty description');
-    }
+  ({bool error, String msg, int? id}) createTask(List<String> args) =>
+      _createItem(args, isTask: true);
 
-    final id = _generateId();
-    final meta = _nowMeta();
-    items[id] = TaskItem(
-      id: id,
-      description: parsed.description,
-      boards: parsed.boards,
-      dateString: meta.dateString,
-      timestamp: meta.timestamp,
-      isTask: false,
-    );
-    _save();
-    return (error: false, msg: 'Created note [$id]: ${parsed.description}');
+  ({bool error, String msg}) createNote(List<String> args) {
+    final res = _createItem(args, isTask: false);
+    return (error: res.error, msg: res.msg);
   }
 
   ({bool error, String msg, List<int> valid}) _validateIds(
@@ -180,207 +155,139 @@ class Core {
     return (error: false, msg: '', valid: valid);
   }
 
-  ({bool error, String msg}) checkTasks(List<String> idsRaw) {
+  ({bool error, String msg}) _processItems(
+    List<String> idsRaw,
+    String? Function(TaskItem) action,
+  ) {
     final v = _validateIds(idsRaw);
     if (v.error) return (error: true, msg: v.msg);
 
-    final checked = <int>[];
-    final unchecked = <int>[];
-
+    final results = <String, List<int>>{};
     for (var id in v.valid) {
-      final it = items[id]!;
-      if (!it.isTask) {
-        return (error: true, msg: 'Item $id is a note, cannot check/uncheck');
-      }
-      it.isComplete = !it.isComplete;
-      if (it.isComplete) it.inProgress = false;
-      if (it.isComplete) {
-        checked.add(id);
-      } else {
-        unchecked.add(id);
-      }
+      final statusGroup = action(items[id]!);
+      if (statusGroup != null)
+        results.putIfAbsent(statusGroup, () => []).add(id);
     }
-    _save();
 
-    var msg = '';
-    if (checked.isNotEmpty) {
-      msg += 'Checked (complete): ${checked.join(', ')}. ';
-    }
-    if (unchecked.isNotEmpty) {
-      msg += 'Unchecked (pending): ${unchecked.join(', ')}.';
-    }
-    return (error: false, msg: msg.isEmpty ? 'No tasks updated' : msg.trim());
+    if (results.isEmpty) return (error: true, msg: 'No eligible items updated');
+
+    _save();
+    return (
+      error: false,
+      msg: results.entries
+          .map((e) => '${e.key}: ${e.value.join(', ')}')
+          .join('. '),
+    );
   }
 
-  ({bool error, String msg}) beginTasks(List<String> idsRaw) {
-    final v = _validateIds(idsRaw);
-    if (v.error) return (error: true, msg: v.msg);
+  ({bool error, String msg}) checkTasks(List<String> idsRaw) =>
+      _processItems(idsRaw, (item) {
+        if (!item.isTask) return null;
+        item.isComplete = !item.isComplete;
+        if (item.isComplete) item.inProgress = false;
+        return item.isComplete ? 'Checked (complete)' : 'Unchecked (pending)';
+      });
 
-    final started = <int>[];
-    final paused = <int>[];
+  ({bool error, String msg}) beginTasks(List<String> idsRaw) =>
+      _processItems(idsRaw, (item) {
+        if (!item.isTask || item.isComplete) return null;
+        item.inProgress = !item.inProgress;
+        return item.inProgress ? 'Started' : 'Paused';
+      });
 
-    for (var id in v.valid) {
-      final it = items[id]!;
-      if (!it.isTask) {
-        return (error: true, msg: 'Item $id is a note, cannot start/pause');
+  ({bool error, String msg}) starItems(List<String> idsRaw) =>
+      _processItems(idsRaw, (item) {
+        item.isStarred = !item.isStarred;
+        return item.isStarred ? 'Starred' : 'Unstarred';
+      });
+
+  ({bool error, String msg}) toggleArchive(List<String> idsRaw) {
+    final toggled = <String>[];
+    final notFound = <String>[];
+
+    for (var raw in idsRaw) {
+      final id = int.tryParse(raw);
+      if (id == null) {
+        notFound.add(raw);
+        continue;
       }
-      if (it.isComplete) {
-        return (error: true, msg: 'Task $id is completed, cannot start');
-      }
-      it.inProgress = !it.inProgress;
-      if (it.inProgress) {
-        started.add(id);
-      } else {
-        paused.add(id);
-      }
-    }
-    _save();
 
-    var msg = '';
-    if (started.isNotEmpty) msg += 'Started: ${started.join(', ')}. ';
-    if (paused.isNotEmpty) msg += 'Paused: ${paused.join(', ')}.';
-    return (error: false, msg: msg.trim());
-  }
-
-  ({bool error, String msg}) starItems(List<String> idsRaw) {
-    final v = _validateIds(idsRaw);
-    if (v.error) return (error: true, msg: v.msg);
-
-    final starred = <int>[];
-    final unstarred = <int>[];
-
-    for (var id in v.valid) {
-      items[id]!.isStarred = !items[id]!.isStarred;
-      if (items[id]!.isStarred) {
-        starred.add(id);
-      } else {
-        unstarred.add(id);
-      }
-    }
-    _save();
-
-    var msg = '';
-    if (starred.isNotEmpty) msg += 'Starred: ${starred.join(', ')}. ';
-    if (unstarred.isNotEmpty) msg += 'Unstarred: ${unstarred.join(', ')}.';
-    return (error: false, msg: msg.trim());
-  }
-
-  ({bool error, String msg}) deleteItems(List<String> idsRaw) {
-    final v = _validateIds(idsRaw);
-    if (v.error) return (error: true, msg: v.msg);
-
-    final moved = <int>[];
-
-    List<int> getAllDescendants(int itemId, Map<int, TaskItem> allItems) {
-      final descendants = <int>[];
-      for (var entry in allItems.entries) {
-        if (entry.value.parentId == itemId) {
-          descendants.add(entry.key);
-          descendants.addAll(getAllDescendants(entry.key, allItems));
+      if (items.containsKey(id)) {
+        // Active -> Archive (plus all subtasks)
+        final toArchive = <int>{};
+        void collect(int currentId) {
+          if (!toArchive.add(currentId)) return;
+          items.values
+              .where((it) => it.parentId == currentId)
+              .forEach((c) => collect(c.id));
         }
-      }
-      return descendants;
-    }
 
-    final idsToDelete = <int>{};
-    for (var id in v.valid) {
-      if (!items.containsKey(id)) continue;
-      idsToDelete.add(id);
-      idsToDelete.addAll(getAllDescendants(id, items));
-    }
+        collect(id);
 
-    for (var id in idsToDelete) {
-      final item = items[id];
-      if (item == null) continue;
-      final archiveId = _nextArchiveId();
-      archive[archiveId] = item.copyWith(newId: archiveId);
-      items.remove(id);
-      moved.add(id);
-    }
+        for (var aId in toArchive) {
+          final item = items.remove(aId);
+          if (item != null) archive[aId] = item; // Keep exact same ID!
+        }
+        toggled.add('$id (archived)');
+      } else if (archive.containsKey(id)) {
+        // Archive -> Active
+        final item = archive.remove(id)!;
+        items[id] = item; // Keep exact same ID!
 
-    _save();
-    return (error: false, msg: 'Deleted and archived: ${moved.join(', ')}');
-  }
-
-  int _nextArchiveId() {
-    if (archive.isEmpty) return 1;
-    return archive.keys.reduce((a, b) => a > b ? a : b) + 1;
-  }
-
-  ({bool error, String msg}) restoreItems(List<String> idsRaw) {
-    final v = _validateIds(idsRaw, fromArchive: true);
-    if (v.error) return (error: true, msg: v.msg);
-
-    final map = <int, int>{};
-    final restores = <String>[];
-
-    for (var oldId in v.valid) {
-      final archived = archive[oldId];
-      if (archived == null) continue;
-      final newId = _generateId();
-
-      final restoredItem = archived.copyWith(newId: newId);
-      map[oldId] = newId;
-      items[newId] = restoredItem;
-      archive.remove(oldId);
-      restores.add('$oldId->$newId');
-    }
-
-    for (var entry in map.entries) {
-      final newId = entry.value;
-      final item = items[newId]!;
-      if (item.parentId != null) {
-        if (map.containsKey(item.parentId)) {
-          item.parentId = map[item.parentId];
-        } else if (!items.containsKey(item.parentId)) {
+        // If parent no longer exists in active items, unlink it
+        if (item.parentId != null && !items.containsKey(item.parentId)) {
           item.parentId = null;
         }
+        toggled.add('$id (restored)');
+      } else {
+        notFound.add(raw);
       }
     }
 
+    if (toggled.isEmpty)
+      return (error: true, msg: 'IDs not found: ${notFound.join(', ')}');
     _save();
-    return (error: false, msg: 'Restored: ${restores.join(', ')}');
+    return (error: false, msg: 'Toggled archive state: ${toggled.join(', ')}');
   }
 
   ({bool error, String msg}) editItem(String idRaw, String newDesc) {
-    final id = int.tryParse(idRaw);
-    if (id == null || !items.containsKey(id)) {
-      return (error: true, msg: 'ID $id not found');
-    }
-    if (newDesc.trim().isEmpty) {
+    final item = _getItem(idRaw);
+    if (item == null) return (error: true, msg: 'ID $idRaw not found');
+    if (newDesc.trim().isEmpty)
       return (error: true, msg: 'Description required');
-    }
-    items[id]!.description = newDesc.trim();
+
+    item.description = newDesc.trim();
     _save();
-    return (error: false, msg: 'Updated item $id: "${newDesc.trim()}"');
+    return (
+      error: false,
+      msg: 'Updated item ${item.id}: "${item.description}"',
+    );
   }
 
   ({bool error, String msg}) moveBoards(
     String idRaw,
     List<String> targetBoards,
   ) {
-    final id = int.tryParse(idRaw);
-    if (id == null || !items.containsKey(id)) {
-      return (error: true, msg: 'ID $id not found');
-    }
+    final item = _getItem(idRaw);
+    if (item == null) return (error: true, msg: 'ID $idRaw not found');
 
-    final boards = <String>[];
-    for (var b in targetBoards) {
-      final clean = b.toLowerCase().replaceAll(RegExp(r'[^a-z0-9_-]'), '');
-      if (clean == 'inbox') {
-        boards.add('inbox');
-      } else if (clean.isNotEmpty) {
-        boards.add('@$clean');
-      }
-    }
+    final boards = targetBoards
+        .map((b) {
+          final clean = b.toLowerCase().replaceAll(RegExp(r'[^a-z0-9_-]'), '');
+          return clean == 'inbox' ? clean : (clean.isNotEmpty ? '@$clean' : '');
+        })
+        .where((b) => b.isNotEmpty)
+        .toSet()
+        .toList();
+
     if (boards.isEmpty) boards.add('inbox');
 
-    items[id]!.parentId = null;
-    items[id]!.boards = boards.toSet().toList();
+    item.parentId = null;
+    item.boards = boards;
     _save();
     return (
       error: false,
-      msg: 'Moved [$id] to boards: ${boards.join(', ')} (Unlinked)',
+      msg: 'Moved [${item.id}] to boards: ${boards.join(', ')} (Unlinked)',
     );
   }
 
@@ -394,32 +301,28 @@ class Core {
   }
 
   ({bool error, String msg}) getLocation(String idRaw) {
-    final id = int.tryParse(idRaw);
-    if (id == null || !items.containsKey(id)) {
-      return (error: true, msg: 'ID $id not found');
-    }
+    final item = _getItem(idRaw);
+    if (item == null) return (error: true, msg: 'ID $idRaw not found');
 
-    final item = items[id]!;
     final loc = item.parentId != null
         ? 'a subtask of @${item.parentId}'
         : 'on board(s): ${item.boards.join(', ')}';
-    return (error: false, msg: 'Item [$id] is currently $loc');
+    return (error: false, msg: 'Item [${item.id}] is currently $loc');
   }
 
   ({bool error, String msg}) createSubtask(
     String parentIdRaw,
     List<String> args,
   ) {
-    final parentId = int.tryParse(parentIdRaw);
-    if (parentId == null || !items.containsKey(parentId)) {
-      return (error: true, msg: 'Parent ID $parentId not found');
-    }
+    final parent = _getItem(parentIdRaw);
+    if (parent == null)
+      return (error: true, msg: 'Parent ID $parentIdRaw not found');
 
     final res = createTask(args);
     if (res.error) return (error: res.error, msg: res.msg);
 
     final newId = res.id!;
-    if (_wouldCreateCycle(newId, parentId)) {
+    if (_wouldCreateCycle(newId, parent.id)) {
       items.remove(newId);
       _save();
       return (
@@ -428,11 +331,11 @@ class Core {
       );
     }
 
-    items[newId]!.parentId = parentId;
+    items[newId]!.parentId = parent.id;
     _save();
     return (
       error: false,
-      msg: 'Created subtask [$newId] linked to parent [$parentId]',
+      msg: 'Created subtask [$newId] linked to parent [${parent.id}]',
     );
   }
 
@@ -440,59 +343,52 @@ class Core {
     String subtaskIdRaw,
     String newParentIdRaw,
   ) {
-    final subId = int.tryParse(subtaskIdRaw);
-    final pId = int.tryParse(newParentIdRaw);
+    final sub = _getItem(subtaskIdRaw);
+    final parent = _getItem(newParentIdRaw);
 
-    if (subId == null || !items.containsKey(subId)) {
-      return (error: true, msg: 'Subtask ID $subId not found');
-    }
-    if (pId == null || !items.containsKey(pId)) {
-      return (error: true, msg: 'Parent ID $pId not found');
-    }
-    if (subId == pId) {
+    if (sub == null)
+      return (error: true, msg: 'Subtask ID $subtaskIdRaw not found');
+    if (parent == null)
+      return (error: true, msg: 'Parent ID $newParentIdRaw not found');
+    if (sub.id == parent.id)
       return (error: true, msg: 'Cannot nest an item under itself');
-    }
 
-    if (_wouldCreateCycle(subId, pId)) {
+    if (_wouldCreateCycle(sub.id, parent.id))
       return (
         error: true,
         msg: 'Cannot reparent - would create circular reference',
       );
-    }
 
-    items[subId]!.parentId = pId;
+    sub.parentId = parent.id;
     _save();
-    return (error: false, msg: 'Nested [$subId] under [$pId]');
+    return (error: false, msg: 'Nested [${sub.id}] under [${parent.id}]');
   }
 
-  ({bool error, String msg}) updatePriority(String idRaw, String levelRaw) {
-    final id = int.tryParse(idRaw);
-    final level = int.tryParse(levelRaw);
+  ({bool error, String msg}) updatePriority(String idRaw, [String? levelRaw]) {
+    final item = _getItem(idRaw);
+    if (item == null) return (error: true, msg: 'ID $idRaw not found');
+    if (!item.isTask) return (error: true, msg: 'Only tasks have priority');
 
-    if (id == null || !items.containsKey(id)) {
-      return (error: true, msg: 'ID $id not found');
-    }
-    if (level == null || ![1, 2, 3].contains(level)) {
-      return (error: true, msg: 'Priority must be 1,2,3');
-    }
-    if (!items[id]!.isTask) {
-      return (error: true, msg: 'Only tasks have priority');
+    if (levelRaw != null) {
+      final level = int.tryParse(levelRaw);
+      if (level == null || level < 1 || level > 3)
+        return (error: true, msg: 'Priority must be 1,2,3');
+      item.priority = level;
+    } else {
+      // Toggle magic!
+      item.priority = item.priority == 3 ? 1 : item.priority + 1;
     }
 
-    items[id]!.priority = level;
     _save();
-    final prio = level == 3 ? 'HIGH' : (level == 2 ? 'MEDIUM' : 'NORMAL');
-    return (error: false, msg: 'Priority of task $id set to $prio');
+    final prioStr = const ['', 'NORMAL', 'MEDIUM', 'HIGH'][item.priority];
+    return (error: false, msg: 'Priority of task ${item.id} set to $prioStr');
   }
 
   ({bool error, String msg}) updateDue(String idRaw, String dueDateRaw) {
-    final id = int.tryParse(idRaw);
-    if (id == null || !items.containsKey(id)) {
-      return (error: true, msg: 'ID $id not found');
-    }
-    if (!items[id]!.isTask) {
+    final item = _getItem(idRaw);
+    if (item == null) return (error: true, msg: 'ID $idRaw not found');
+    if (!item.isTask)
       return (error: true, msg: 'Only tasks can have due dates');
-    }
 
     if (dueDateRaw != 'none' &&
         !RegExp(r'^\d{2}-\d{2}-\d{4}$').hasMatch(dueDateRaw)) {
@@ -502,48 +398,100 @@ class Core {
       );
     }
 
-    items[id]!.dueDate = dueDateRaw == 'none' ? null : dueDateRaw;
+    item.dueDate = dueDateRaw == 'none' ? null : dueDateRaw;
     _save();
     return (
       error: false,
-      msg: 'Due date for task $id set to ${items[id]!.dueDate ?? 'none'}',
+      msg: 'Due date for task ${item.id} set to ${item.dueDate ?? 'none'}',
     );
   }
 
   ({bool error, String msg}) clearCompleted() {
-    final toDelete = <String>[];
-    for (var entry in items.entries) {
-      if (entry.value.isTask && entry.value.isComplete) {
-        toDelete.add(entry.key.toString());
-      }
-    }
-    if (toDelete.isEmpty) {
+    final toDelete = items.values
+        .where((it) => it.isTask && it.isComplete)
+        .map((it) => it.id.toString())
+        .toList();
+
+    if (toDelete.isEmpty)
       return (error: false, msg: 'No completed tasks to clear');
-    }
-    return deleteItems(toDelete);
+    return toggleArchive(toDelete);
   }
 
   // --- VIEW GENERATORS ---
 
+  Widget _buildRichText(
+    List<InlineSpan> mainSpans, {
+    List<InlineSpan>? footerSpans,
+  }) {
+    final textWidget = RichText(
+      text: TextSpan(
+        style: const TextStyle(
+          fontFamily: 'JetBrains Mono',
+          fontFamilyFallback: _kMono,
+          fontSize: _kFontSize,
+          height: _kLineH,
+          color: Color(0xFFCCCCCC),
+        ),
+        children: mainSpans,
+      ),
+    );
+
+    if (footerSpans == null) return textWidget;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        textWidget,
+        const SizedBox(height: 12),
+        RichText(
+          text: TextSpan(
+            style: const TextStyle(
+              fontFamily: 'JetBrains Mono',
+              fontFamilyFallback: _kMono,
+              fontSize: _kFontSize - 1,
+              height: 1.4,
+              color: cDim,
+            ),
+            children: footerSpans,
+          ),
+        ),
+        const SizedBox(height: 10),
+      ],
+    );
+  }
+
+  bool _isOverdue(String dueStr) {
+    try {
+      final parts = dueStr.split('-');
+      final dueTime = DateTime(
+        int.parse(parts[2]),
+        int.parse(parts[1]),
+        int.parse(parts[0]),
+        23,
+        59,
+        59,
+      );
+      return DateTime.now().isAfter(dueTime);
+    } catch (_) {
+      return false;
+    }
+  }
+
   Widget getBoardView() {
     final groups = _groupByBoard();
     final stats = _computeStats();
-
-    // Build per-board rich text
     final spans = <InlineSpan>[];
 
     for (var board in groups.keys) {
       final itemsList = groups[board]!;
       if (itemsList.isEmpty) continue;
 
-      final taskCount = itemsList.where((i) => i.isTask).length;
-      final completeCount = itemsList
-          .where((i) => i.isTask && i.isComplete)
-          .length;
+      final tasks = itemsList.where((i) => i.isTask);
+      final doneCount = tasks.where((i) => i.isComplete).length;
       final boardName = board == 'inbox' ? '@inbox' : board;
 
-      spans.add(const TextSpan(text: '\n'));
-      spans.add(
+      spans.addAll([
+        const TextSpan(text: '\n'),
         TextSpan(
           text: boardName,
           style: const TextStyle(
@@ -552,13 +500,11 @@ class Core {
             letterSpacing: 0.5,
           ),
         ),
-      );
-      spans.add(
         TextSpan(
-          text: '  $completeCount/$taskCount done\n',
+          text: '  $doneCount/${tasks.length} done\n',
           style: const TextStyle(color: cDim),
         ),
-      );
+      ]);
 
       for (var it in itemsList) {
         spans.addAll(_formatItemLine(it));
@@ -566,7 +512,6 @@ class Core {
       }
     }
 
-    // Stats footer spans
     final footerSpans = <InlineSpan>[
       TextSpan(
         text: '${stats.complete}',
@@ -602,39 +547,7 @@ class Core {
       ),
     ];
 
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        // Main items
-        RichText(
-          text: TextSpan(
-            style: const TextStyle(
-              fontFamily: 'JetBrains Mono',
-              fontFamilyFallback: _kMono,
-              fontSize: _kFontSize,
-              height: _kLineH,
-              color: Color(0xFFCCCCCC),
-            ),
-            children: spans,
-          ),
-        ),
-        const SizedBox(height: 12),
-        // Stats row
-        RichText(
-          text: TextSpan(
-            style: const TextStyle(
-              fontFamily: 'JetBrains Mono',
-              fontFamilyFallback: _kMono,
-              fontSize: _kFontSize - 1,
-              height: 1.4,
-              color: cDim,
-            ),
-            children: footerSpans,
-          ),
-        ),
-        const SizedBox(height: 10),
-      ],
-    );
+    return _buildRichText(spans, footerSpans: footerSpans);
   }
 
   Widget getTimelineView() {
@@ -664,22 +577,12 @@ class Core {
       }
     }
     if (spans.isNotEmpty) spans.removeLast();
-    return RichText(
-      text: TextSpan(
-        style: const TextStyle(
-          fontFamily: 'JetBrains Mono',
-          fontFamilyFallback: _kMono,
-          fontSize: _kFontSize,
-          height: _kLineH,
-          color: Color(0xFFCCCCCC),
-        ),
-        children: spans,
-      ),
-    );
+
+    return _buildRichText(spans);
   }
 
   Widget getArchiveView() {
-    if (archive.isEmpty) {
+    if (archive.isEmpty)
       return const Text(
         'Archive is empty.',
         style: TextStyle(
@@ -689,7 +592,7 @@ class Core {
           fontSize: _kFontSize,
         ),
       );
-    }
+
     final spans = <InlineSpan>[
       const TextSpan(
         text: 'ARCHIVE\n',
@@ -700,6 +603,7 @@ class Core {
         ),
       ),
     ];
+
     for (var entry in archive.entries) {
       final item = entry.value;
       final type = item.isTask
@@ -711,70 +615,53 @@ class Core {
       );
     }
     if (spans.isNotEmpty) spans.removeLast();
-    return RichText(
-      text: TextSpan(
-        style: const TextStyle(
-          fontFamily: 'JetBrains Mono',
-          fontFamilyFallback: _kMono,
-          fontSize: _kFontSize,
-          height: _kLineH,
-          color: Color(0xFFCCCCCC),
-        ),
-        children: spans,
-      ),
-    );
+
+    return _buildRichText(spans);
   }
 
   Map<int, TaskItem> findItems(List<String> terms) {
     final lower = terms.map((t) => t.toLowerCase()).toList();
-    final result = <int, TaskItem>{};
-    for (var entry in items.entries) {
-      if (lower.any(
-        (term) => entry.value.description.toLowerCase().contains(term),
-      )) {
-        result[entry.key] = entry.value;
-      }
-    }
-    return result;
+    return Map.fromEntries(
+      items.entries.where(
+        (e) => lower.any(
+          (term) => e.value.description.toLowerCase().contains(term),
+        ),
+      ),
+    );
   }
 
   Map<int, TaskItem> filterByAttributes(List<String> attrList) {
-    var filtered = Map<int, TaskItem>.from(items);
-    for (var a in attrList) {
-      final low = a.toLowerCase();
-      if (['star', 'starred'].contains(low)) {
-        filtered.removeWhere((_, v) => !v.isStarred);
-      } else if (['done', 'complete', 'checked'].contains(low)) {
-        filtered.removeWhere((_, v) => !v.isTask || !v.isComplete);
-      } else if (['progress', 'started'].contains(low)) {
-        filtered.removeWhere(
-          (_, v) => !v.isTask || !v.inProgress || v.isComplete,
+    final attrs = attrList.map((a) => a.toLowerCase()).toSet();
+    return Map.fromEntries(
+      items.entries.where((e) {
+        final v = e.value;
+        return attrs.every(
+          (a) => switch (a) {
+            'star' || 'starred' => v.isStarred,
+            'done' || 'complete' || 'checked' => v.isTask && v.isComplete,
+            'progress' ||
+            'started' => v.isTask && v.inProgress && !v.isComplete,
+            'pending' ||
+            'unchecked' => v.isTask && !v.isComplete && !v.inProgress,
+            'task' || 'tasks' => v.isTask,
+            'note' || 'notes' => !v.isTask,
+            _ => true,
+          },
         );
-      } else if (['pending', 'unchecked'].contains(low)) {
-        filtered.removeWhere(
-          (_, v) => !v.isTask || v.isComplete || v.inProgress,
-        );
-      } else if (['task', 'tasks'].contains(low)) {
-        filtered.removeWhere((_, v) => !v.isTask);
-      } else if (['note', 'notes'].contains(low)) {
-        filtered.removeWhere((_, v) => v.isTask);
-      }
-    }
-    return filtered;
+      }),
+    );
   }
 
   Map<int, TaskItem> listByAttributesAndBoards(
     List<String> flags,
     List<String> boards,
   ) {
-    var filtered = filterByAttributes(flags);
+    final filtered = filterByAttributes(flags);
     if (boards.isNotEmpty) {
       final boardSet = boards
           .map((b) => b == 'inbox' ? 'inbox' : (b.startsWith('@') ? b : '@$b'))
           .toSet();
-      filtered.removeWhere(
-        (_, v) => !v.boards.any((b) => boardSet.contains(b)),
-      );
+      filtered.removeWhere((_, v) => !v.boards.any(boardSet.contains));
     }
     return filtered;
   }
@@ -787,131 +674,97 @@ class Core {
   }) {
     final seen = visited ?? <int>{};
     seen.add(item.id);
-    final spans = <InlineSpan>[];
-    final spacing = ' ' * (indent == 0 ? 2 : indent);
 
-    spans.add(TextSpan(text: spacing));
-    spans.add(
+    String prefix = '•';
+    Color pColor = cBlue;
+    TextStyle dStyle = const TextStyle(color: Color(0xFFDADADA));
+
+    if (item.isTask) {
+      if (item.isComplete) {
+        prefix = '✓';
+        pColor = cGreen;
+        dStyle = const TextStyle(color: cDim);
+      } else if (item.inProgress) {
+        prefix = '•';
+        pColor = cBlue;
+      } else {
+        prefix = '☐';
+        pColor = cPurple;
+      }
+
+      if (!item.isComplete && item.priority == 3) {
+        dStyle = const TextStyle(
+          color: cYellow,
+          decoration: TextDecoration.underline,
+        );
+      }
+    } else {
+      dStyle = const TextStyle(color: cDim);
+    }
+
+    final spacing = ' ' * (indent == 0 ? 2 : indent);
+    final spans = <InlineSpan>[
+      TextSpan(text: spacing),
       TextSpan(
         text: '${item.id}.',
         style: const TextStyle(color: cDim),
       ),
-    );
-
-    String prefixText;
-    Color prefixColor;
-    TextStyle descStyle = const TextStyle(color: Color(0xFFDADADA));
-
-    if (item.isTask) {
-      if (item.isComplete) {
-        prefixText = '✓';
-        prefixColor = cGreen;
-        descStyle = const TextStyle(color: cDim);
-      } else if (item.inProgress) {
-        prefixText = '•';
-        prefixColor = cBlue;
-      } else {
-        prefixText = '☐';
-        prefixColor = cPurple;
-      }
-    } else {
-      prefixText = '•';
-      prefixColor = cBlue;
-      descStyle = const TextStyle(color: cDim);
-    }
-
-    spans.add(const TextSpan(text: ' '));
-    spans.add(
       TextSpan(
-        text: prefixText,
-        style: TextStyle(color: prefixColor),
+        text: ' $prefix ',
+        style: TextStyle(color: pColor),
       ),
-    );
-    spans.add(const TextSpan(text: ' '));
-
-    if (item.isTask && !item.isComplete && item.priority == 3) {
-      descStyle = const TextStyle(
-        color: cYellow,
-        decoration: TextDecoration.underline,
-      );
-    }
-
-    spans.add(TextSpan(text: item.description, style: descStyle));
+      TextSpan(text: item.description, style: dStyle),
+    ];
 
     if (item.isTask && !item.isComplete) {
-      if (item.priority == 3 || item.priority == 2) {
+      if (item.priority >= 2)
         spans.add(
           const TextSpan(
             text: ' (!)',
             style: TextStyle(color: cYellow),
           ),
         );
-      }
-    }
-
-    if (item.isTask && item.dueDate != null && !item.isComplete) {
-      try {
-        final parts = item.dueDate!.split('-');
-        final dueTime = DateTime(
-          int.parse(parts[2]),
-          int.parse(parts[1]),
-          int.parse(parts[0]),
-          23,
-          59,
-          59,
-        );
-        final isOverdue = DateTime.now().isAfter(dueTime);
+      if (item.dueDate != null)
         spans.add(
           TextSpan(
             text: ' [due: ${item.dueDate}]',
-            style: TextStyle(color: isOverdue ? cRed : cDim),
+            style: TextStyle(color: _isOverdue(item.dueDate!) ? cRed : cDim),
           ),
         );
-      } catch (_) {
-        spans.add(
-          TextSpan(
-            text: ' [due: ${item.dueDate}]',
-            style: const TextStyle(color: cDim),
-          ),
-        );
-      }
     }
 
     final age = _getAge(item.timestamp);
-    if (age != null) {
+    if (age != null)
       spans.add(
         TextSpan(
           text: ' ${age}d',
           style: const TextStyle(color: cDim),
         ),
       );
-    }
-
-    if (item.isStarred) {
+    if (item.isStarred)
       spans.add(
         const TextSpan(
           text: ' ★',
           style: TextStyle(color: cYellow),
         ),
       );
-    }
 
-    final children = items.values
-        .where((c) => c.parentId == item.id && !seen.contains(c.id))
-        .toList();
-    if (children.isNotEmpty) {
-      children.sort((a, b) => a.id.compareTo(b.id));
-      for (var child in children) {
-        spans.add(const TextSpan(text: '\n'));
-        spans.addAll(
-          _formatItemLine(
-            child,
-            indent: indent == 0 ? 6 : indent + 4,
-            parentBoards: parentBoards ?? item.boards,
-            visited: seen,
-          ),
-        );
-      }
+    final children =
+        items.values
+            .where((c) => c.parentId == item.id && !seen.contains(c.id))
+            .toList()
+          ..sort((a, b) => a.id.compareTo(b.id));
+
+    for (var child in children) {
+      spans.add(const TextSpan(text: '\n'));
+      spans.addAll(
+        _formatItemLine(
+          child,
+          indent: indent == 0 ? 6 : indent + 4,
+          parentBoards: parentBoards ?? item.boards,
+          visited: seen,
+        ),
+      );
     }
 
     return spans;
@@ -925,23 +778,13 @@ class Core {
   }
 
   Map<String, List<TaskItem>> _groupByBoard() {
-    final boardsSet = {'inbox'};
-    for (var it in items.values) {
-      boardsSet.addAll(it.boards);
-    }
-
     final groups = <String, List<TaskItem>>{};
-    for (var b in boardsSet) {
-      groups[b] = [];
-    }
-
     for (var it in items.values) {
       if (it.parentId != null) continue;
       for (var b in it.boards) {
-        groups[b]?.add(it);
+        groups.putIfAbsent(b, () => []).add(it);
       }
     }
-
     for (var b in groups.keys) {
       groups[b]!.sort((a, b) => a.id.compareTo(b.id));
     }
@@ -962,28 +805,24 @@ class Core {
 
   ({int percent, int complete, int inProgress, int pending, int notes})
   _computeStats() {
-    int complete = 0, inProgress = 0, pending = 0, notes = 0;
+    int c = 0, i = 0, p = 0, n = 0;
     for (var it in items.values) {
-      if (it.isTask) {
-        if (it.isComplete) {
-          complete++;
-        } else if (it.inProgress) {
-          inProgress++;
-        } else {
-          pending++;
-        }
-      } else {
-        notes++;
-      }
+      if (!it.isTask)
+        n++;
+      else if (it.isComplete)
+        c++;
+      else if (it.inProgress)
+        i++;
+      else
+        p++;
     }
-    final total = complete + inProgress + pending;
-    final percent = total == 0 ? 0 : (complete * 100 ~/ total);
+    final total = c + i + p;
     return (
-      percent: percent,
-      complete: complete,
-      inProgress: inProgress,
-      pending: pending,
-      notes: notes,
+      percent: total == 0 ? 0 : (c * 100 ~/ total),
+      complete: c,
+      inProgress: i,
+      pending: p,
+      notes: n,
     );
   }
 }

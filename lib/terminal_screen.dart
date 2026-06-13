@@ -2,6 +2,9 @@ part of 'main.dart';
 
 // --- TERMINAL UI ---
 
+/// Data record for storing terminal output history
+typedef TerminalNode = ({String? command, Widget? widget});
+
 class TerminalScreen extends StatefulWidget {
   const TerminalScreen({super.key});
 
@@ -15,11 +18,32 @@ class _TerminalScreenState extends State<TerminalScreen> {
   final FocusNode _focusNode = FocusNode();
   final ScrollController _scrollController = ScrollController();
 
-  final List<Widget> _outputHistory = [];
+  final List<TerminalNode> _outputHistory = [];
   final List<String> _cmdHistory = [];
   int _historyPos = 0;
   bool _isNavigating = false;
   static const int maxHistory = 100;
+
+  static const _helpMenu =
+      '''task / -t / add description @board p:2                 : create task
+note / -n description @board                           : create note
+sub / subtask id description                           : create subtask under parent
+list / ls / -l [@board] [flags]                        : list items (flags: star,done,progress,pending,task,note)
+board                                                  : dashboard view
+timeline / -i                                          : timeline by creation date
+archive / -a [id1 id2 ...]                             : view archive OR toggle archive state
+check / -c [id1 id2 ...]                               : toggle complete
+begin / -b [id1 id2 ...]                               : start/pause task
+star / -s [id1 id2 ...]                                : toggle starred
+delete / -d / restore / -r [id1 id2 ...]               : toggle archive state (alias)
+sweep                                                  : remove all completed tasks
+edit / -e id new description                           : change description
+move / mv / -m id parent_id                            : nest under another task
+move / mv / -m id @board1 @board2 ...                  : move to board(s) (unlinks)
+priority / -p id [1|2|3]                               : cycle priority OR set to 1/2/3
+due id DD-MM-YYYY | none                               : set or remove due date
+find / -f keyword                                      : search descriptions
+help / -h / --help                                     : show this menu''';
 
   @override
   void initState() {
@@ -61,56 +85,16 @@ class _TerminalScreenState extends State<TerminalScreen> {
     if (_cmdHistory.length > maxHistory) _cmdHistory.removeAt(0);
   }
 
-  void _addUserCommand(String cmd) {
-    setState(() {
-      _outputHistory.add(
-        Padding(
-          padding: const EdgeInsets.only(top: 14, bottom: 2),
-          child: RichText(
-            text: TextSpan(
-              children: [
-                const TextSpan(
-                  text: '\$ ',
-                  style: TextStyle(
-                    color: Color.fromARGB(255, 255, 255, 255),
-                    fontFamily: 'JetBrains Mono',
-                    fontFamilyFallback: _kMono,
-                    fontSize: _kFontSize,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-                TextSpan(
-                  text: cmd,
-                  style: const TextStyle(
-                    color: Color(0xFFEEEEEE),
-                    fontFamily: 'JetBrains Mono',
-                    fontFamilyFallback: _kMono,
-                    fontSize: _kFontSize,
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ),
-      );
-    });
+  /// Universal method to add terminal output nodes (command or widget)
+  void _addNode({String? command, Widget? widget}) {
+    setState(() => _outputHistory.add((command: command, widget: widget)));
   }
 
-  void _addResponseWidget(Widget widget) {
-    setState(() {
-      _outputHistory.add(
-        Padding(
-          padding: const EdgeInsets.only(top: 6, bottom: 4, left: 16),
-          child: widget,
-        ),
-      );
-    });
-  }
-
+  /// Wrapper for text responses with error coloring
   void _addResponse(String msg) {
     final isError = msg.startsWith('Error:');
-    _addResponseWidget(
-      Text(
+    _addNode(
+      widget: Text(
         msg,
         style: TextStyle(
           color: isError ? const Color(0xFFE06C75) : const Color(0xFFCCCCCC),
@@ -126,240 +110,218 @@ class _TerminalScreenState extends State<TerminalScreen> {
   void _handleCommand(String raw) {
     final trimmed = raw.trim();
     if (trimmed.isEmpty) {
-      _addResponseWidget(tb.getBoardView());
+      _addNode(widget: tb.getBoardView());
       return;
     }
 
     final args = trimmed.split(RegExp(r'\s+'));
     final mainCmd = args[0].toLowerCase();
+    final tailArgs = args.sublist(1);
 
-    const helpMenu =
-        '''task / -t / add description @board p:2                 : create task
-note / -n description @board                           : create note
-sub / subtask @id description                          : create subtask under parent
-list / ls / -l [@board] [flags]                        : list items (flags: star,done,progress,pending,task,note)
-board                                                  : dashboard view
-timeline / -i                                          : timeline by creation date
-archive / -a                                           : show archived items
-check / -c [id1 id2 ...]                               : toggle complete
-begin / -b [id1 id2 ...]                               : start/pause task
-star / -s [id1 id2 ...]                                : toggle starred
-delete / -d [id1 id2 ...]                              : delete & archive
-sweep                                                  : remove all completed tasks
-edit / -e @id new description                          : change description
-move / mv / -m @id @parent_id                          : nest under another task
-move / mv / -m @id @board1 @board2 ...                 : move to board(s) (unlinks)
-priority / -p @id 1|2|3                                : set priority (1 normal, 3 high)
-due @id DD-MM-YYYY | none                              : set or remove due date
-find / -f keyword                                      : search descriptions
-restore / -r [id1 id2 ...]                             : restore from archive
-help / -h / --help                                     : show this menu''';
-
-    if (['help', '-h', '--help'].contains(mainCmd)) {
-      _addResponse(helpMenu);
-      return;
-    }
-    if (mainCmd == 'board') {
-      _addResponseWidget(tb.getBoardView());
-      return;
-    }
-    if (['task', '-t', 'add'].contains(mainCmd)) {
-      final res = tb.createTask(args.sublist(1));
-      _addResponse(res.error ? 'Error: ${res.msg}' : res.msg);
-      return;
-    }
-    if (['note', '-n'].contains(mainCmd)) {
-      final res = tb.createNote(args.sublist(1));
-      _addResponse(res.error ? 'Error: ${res.msg}' : res.msg);
-      return;
-    }
-    if (['list', '-l', 'ls'].contains(mainCmd)) {
-      final flags = <String>[];
-      final boards = <String>[];
-      for (int i = 1; i < args.length; i++) {
-        final tok = args[i];
-        if (tok.startsWith('@') || tok.toLowerCase() == 'inbox') {
-          boards.add(tok);
-        } else {
-          flags.add(tok);
-        }
-      }
-      final filtered = tb.listByAttributesAndBoards(flags, boards);
-      if (filtered.isEmpty) {
-        _addResponse('No items match.');
-      } else {
-        final rootItems = filtered.values
-            .where((it) => it.parentId == null)
-            .toList();
-        rootItems.sort((a, b) => a.id.compareTo(b.id));
-        final spans = <InlineSpan>[];
-        for (var it in rootItems) {
-          spans.addAll(tb._formatItemLine(it));
-          spans.add(const TextSpan(text: '\n'));
-        }
-        if (spans.isNotEmpty) spans.removeLast();
-        _addResponseWidget(
-          RichText(
-            text: TextSpan(
-              style: const TextStyle(
+    // Add user command to history
+    _addNode(
+      command: trimmed,
+      widget: RichText(
+        text: TextSpan(
+          children: [
+            const TextSpan(
+              text: '\$ ',
+              style: TextStyle(
+                color: Color.fromARGB(255, 255, 255, 255),
                 fontFamily: 'JetBrains Mono',
                 fontFamilyFallback: _kMono,
                 fontSize: _kFontSize,
-                height: _kLineH,
-                color: Color(0xFFCCCCCC),
+                fontWeight: FontWeight.w600,
               ),
-              children: spans,
             ),
-          ),
-        );
-      }
-      return;
-    }
-    if (['check', '-c'].contains(mainCmd)) {
-      if (args.length < 2) {
-        _addResponse('Usage: check id1 id2 ...');
-        return;
-      }
-      final res = tb.checkTasks(args.sublist(1));
-      _addResponse(res.error ? 'Error: ${res.msg}' : res.msg);
-      return;
-    }
-    if (['begin', '-b'].contains(mainCmd)) {
-      if (args.length < 2) {
-        _addResponse('Usage: begin ids');
-        return;
-      }
-      final res = tb.beginTasks(args.sublist(1));
-      _addResponse(res.error ? 'Error: ${res.msg}' : res.msg);
-      return;
-    }
-    if (['star', '-s'].contains(mainCmd)) {
-      if (args.length < 2) {
-        _addResponse('Usage: star ids');
-        return;
-      }
-      final res = tb.starItems(args.sublist(1));
-      _addResponse(res.error ? 'Error: ${res.msg}' : res.msg);
-      return;
-    }
-    if (['delete', '-d'].contains(mainCmd)) {
-      if (args.length < 2) {
-        _addResponse('Usage: delete ids');
-        return;
-      }
-      final res = tb.deleteItems(args.sublist(1));
-      _addResponse(res.error ? 'Error: ${res.msg}' : res.msg);
-      return;
-    }
-    if (mainCmd == 'sweep') {
-      final res = tb.clearCompleted();
-      _addResponse(res.msg);
-      return;
-    }
-    if (['edit', '-e'].contains(mainCmd)) {
-      if (args.length < 3 || !args[1].startsWith('@')) {
-        _addResponse('edit @id new description');
-        return;
-      }
-      final res = tb.editItem(args[1].substring(1), args.sublist(2).join(' '));
-      _addResponse(res.error ? 'Error: ${res.msg}' : res.msg);
-      return;
-    }
-    if (['move', 'mv', '-m', 'm'].contains(mainCmd)) {
-      if (args.length < 2 || !args[1].startsWith('@')) {
-        _addResponse(
-          'Usage: mv @id @parent_id OR mv @id board1 board2 (unlinks)',
-        );
-        return;
-      }
-      final id = args[1].substring(1);
-      if (args.length == 2) {
-        final res = tb.getLocation(id);
-        _addResponse(res.error ? 'Error: ${res.msg}' : res.msg);
-        return;
-      }
-      final targetFlag = args[2];
-      final isParentId =
-          targetFlag.startsWith('@') &&
-          targetFlag.length > 1 &&
-          RegExp(r'^\d+$').hasMatch(targetFlag.substring(1));
+            TextSpan(
+              text: trimmed,
+              style: const TextStyle(
+                color: Color(0xFFEEEEEE),
+                fontFamily: 'JetBrains Mono',
+                fontFamilyFallback: _kMono,
+                fontSize: _kFontSize,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
 
-      if (isParentId) {
-        final res = tb.reparentTask(id, targetFlag.substring(1));
+    switch (mainCmd) {
+      case 'help' || '-h' || '--help':
+        _addResponse(_helpMenu);
+
+      case 'board':
+        _addNode(widget: tb.getBoardView());
+
+      case 'task' || '-t' || 'add':
+        final res = tb.createTask(tailArgs);
         _addResponse(res.error ? 'Error: ${res.msg}' : res.msg);
-      } else {
-        final res = tb.moveBoards(id, args.sublist(2));
+
+      case 'note' || '-n':
+        final res = tb.createNote(tailArgs);
         _addResponse(res.error ? 'Error: ${res.msg}' : res.msg);
-      }
-      return;
-    }
-    if (['sub', 'subtask'].contains(mainCmd)) {
-      if (args.length < 3 || !args[1].startsWith('@')) {
-        _addResponse('Usage: sub @id [options] description');
-        return;
-      }
-      final res = tb.createSubtask(args[1].substring(1), args.sublist(2));
-      _addResponse(res.error ? 'Error: ${res.msg}' : res.msg);
-      return;
-    }
-    if (['priority', '-p'].contains(mainCmd)) {
-      if (args.length < 3 || !args[1].startsWith('@')) {
-        _addResponse('priority @id 1|2|3');
-        return;
-      }
-      final res = tb.updatePriority(args[1].substring(1), args[2]);
-      _addResponse(res.error ? 'Error: ${res.msg}' : res.msg);
-      return;
-    }
-    if (mainCmd == 'due') {
-      if (args.length < 3 || !args[1].startsWith('@')) {
-        _addResponse('Usage: due @id DD-MM-YYYY (or "none" to remove)');
-        return;
-      }
-      final res = tb.updateDue(args[1].substring(1), args[2]);
-      _addResponse(res.error ? 'Error: ${res.msg}' : res.msg);
-      return;
-    }
-    if (['archive', '-a'].contains(mainCmd)) {
-      _addResponseWidget(tb.getArchiveView());
-      return;
-    }
-    if (['restore', '-r'].contains(mainCmd)) {
-      if (args.length < 2) {
-        _addResponse('restore ids');
-        return;
-      }
-      final res = tb.restoreItems(args.sublist(1));
-      _addResponse(res.error ? 'Error: ${res.msg}' : res.msg);
-      return;
-    }
-    if (['timeline', '-i'].contains(mainCmd)) {
-      _addResponseWidget(tb.getTimelineView());
-      return;
-    }
-    if (['find', '-f'].contains(mainCmd)) {
-      if (args.length < 2) {
-        _addResponse('find keyword');
-        return;
-      }
-      final matches = tb.findItems(args.sublist(1));
-      if (matches.isEmpty) {
-        _addResponse('No matches.');
-      } else {
-        final matchesList = matches.values.toList()
-          ..sort((a, b) => a.id.compareTo(b.id));
-        final spans = <InlineSpan>[];
-        for (var it in matchesList) {
-          spans.addAll(tb._formatItemLine(it));
-          spans.add(const TextSpan(text: '\n'));
+
+      case 'list' || '-l' || 'ls':
+        if (tailArgs.isEmpty) {
+          _addResponse('No items match.');
+        } else {
+          final flags = <String>[];
+          final boards = <String>[];
+          for (var tok in tailArgs) {
+            if (tok.startsWith('@') || tok.toLowerCase() == 'inbox') {
+              boards.add(tok);
+            } else {
+              flags.add(tok);
+            }
+          }
+          final filtered = tb.listByAttributesAndBoards(flags, boards);
+          if (filtered.isEmpty) {
+            _addResponse('No items match.');
+          } else {
+            final rootItems = filtered.values
+                .where((it) => it.parentId == null)
+                .toList();
+            rootItems.sort((a, b) => a.id.compareTo(b.id));
+            final spans = <InlineSpan>[];
+            for (var it in rootItems) {
+              spans.addAll(tb._formatItemLine(it));
+              spans.add(const TextSpan(text: '\n'));
+            }
+            if (spans.isNotEmpty) spans.removeLast();
+            _addNode(
+              widget: RichText(
+                text: TextSpan(
+                  style: const TextStyle(
+                    fontFamily: 'JetBrains Mono',
+                    fontFamilyFallback: _kMono,
+                    fontSize: _kFontSize,
+                    height: _kLineH,
+                    color: Color(0xFFCCCCCC),
+                  ),
+                  children: spans,
+                ),
+              ),
+            );
+          }
         }
-        if (spans.isNotEmpty) spans.removeLast();
-        _addResponseWidget(RichText(text: TextSpan(children: spans)));
-      }
-      return;
-    }
 
-    _addResponse('Command not recognized: "$mainCmd"\n\n$helpMenu');
+      case 'check' || '-c':
+        final res = tb.checkTasks(tailArgs);
+        _addResponse(res.error ? 'Error: ${res.msg}' : res.msg);
+
+      case 'begin' || '-b':
+        final res = tb.beginTasks(tailArgs);
+        _addResponse(res.error ? 'Error: ${res.msg}' : res.msg);
+
+      case 'star' || '-s':
+        final res = tb.starItems(tailArgs);
+        _addResponse(res.error ? 'Error: ${res.msg}' : res.msg);
+
+      case 'delete' || '-d':
+        final res = tb.toggleArchive(tailArgs);
+        _addResponse(res.error ? 'Error: ${res.msg}' : res.msg);
+
+      case 'sweep':
+        final res = tb.clearCompleted();
+        _addResponse(res.msg);
+
+      case 'edit' || '-e':
+        if (tailArgs.length < 2) {
+          _addResponse('Usage: edit id new description');
+        } else {
+          final res = tb.editItem(tailArgs[0], tailArgs.sublist(1).join(' '));
+          _addResponse(res.error ? 'Error: ${res.msg}' : res.msg);
+        }
+
+      case 'move' || 'mv' || '-m' || 'm':
+        if (tailArgs.isEmpty) {
+          _addResponse(
+            'Usage: mv id parent_id OR mv id @board1 @board2 (unlinks)',
+          );
+        } else {
+          final id = tailArgs[0];
+          if (tailArgs.length == 1) {
+            final res = tb.getLocation(id);
+            _addResponse(res.error ? 'Error: ${res.msg}' : res.msg);
+          } else {
+            final targetFlag = tailArgs[1];
+            // Since parents are now raw numbers, we just check if it's strictly digits!
+            final isParentId = RegExp(r'^\d+$').hasMatch(targetFlag);
+            if (isParentId) {
+              final res = tb.reparentTask(id, targetFlag);
+              _addResponse(res.error ? 'Error: ${res.msg}' : res.msg);
+            } else {
+              final res = tb.moveBoards(id, tailArgs.sublist(1));
+              _addResponse(res.error ? 'Error: ${res.msg}' : res.msg);
+            }
+          }
+        }
+
+      case 'sub' || 'subtask':
+        if (tailArgs.length < 2) {
+          _addResponse('Usage: sub id [options] description');
+        } else {
+          final res = tb.createSubtask(tailArgs[0], tailArgs.sublist(1));
+          _addResponse(res.error ? 'Error: ${res.msg}' : res.msg);
+        }
+
+      case 'priority' || '-p':
+        if (tailArgs.isEmpty) {
+          _addResponse('Usage: priority id [1|2|3]');
+        } else {
+          final res = tb.updatePriority(
+            tailArgs[0],
+            tailArgs.length > 1 ? tailArgs[1] : null,
+          );
+          _addResponse(res.error ? 'Error: ${res.msg}' : res.msg);
+        }
+
+      case 'due':
+        if (tailArgs.length < 2) {
+          _addResponse('Usage: due id DD-MM-YYYY (or "none" to remove)');
+        } else {
+          final res = tb.updateDue(tailArgs[0], tailArgs[1]);
+          _addResponse(res.error ? 'Error: ${res.msg}' : res.msg);
+        }
+
+      case 'archive' || '-a' || 'delete' || '-d' || 'restore' || '-r':
+        if (tailArgs.isEmpty) {
+          if (mainCmd == 'archive' || mainCmd == '-a') {
+            _addNode(widget: tb.getArchiveView());
+          } else {
+            _addResponse('Usage: $mainCmd id1 [id2 ...]');
+          }
+        } else {
+          final res = tb.toggleArchive(tailArgs);
+          _addResponse(res.error ? 'Error: ${res.msg}' : res.msg);
+        }
+
+      case 'timeline' || '-i':
+        _addNode(widget: tb.getTimelineView());
+
+      case 'find' || '-f':
+        final matches = tb.findItems(tailArgs);
+        if (matches.isEmpty) {
+          _addResponse('No matches.');
+        } else {
+          final matchesList = matches.values.toList()
+            ..sort((a, b) => a.id.compareTo(b.id));
+          final spans = <InlineSpan>[];
+          for (var it in matchesList) {
+            spans.addAll(tb._formatItemLine(it));
+            spans.add(const TextSpan(text: '\n'));
+          }
+          if (spans.isNotEmpty) spans.removeLast();
+          _addNode(
+            widget: RichText(text: TextSpan(children: spans)),
+          );
+        }
+
+      default:
+        _addResponse('Command not recognized: "$mainCmd"\n\n$_helpMenu');
+    }
   }
 
   KeyEventResult _handleKeyEvent(FocusNode node, KeyEvent event) {
@@ -406,7 +368,6 @@ help / -h / --help                                     : show this menu''';
     });
 
     if (text.isNotEmpty) {
-      _addUserCommand(text);
       _addToHistory(text);
       _historyPos = _cmdHistory.length;
     }
@@ -433,7 +394,23 @@ help / -h / --help                                     : show this menu''';
                 child: ListView.builder(
                   controller: _scrollController,
                   itemCount: _outputHistory.length,
-                  itemBuilder: (context, index) => _outputHistory[index],
+                  itemBuilder: (context, index) {
+                    final node = _outputHistory[index];
+                    if (node.command != null) {
+                      return Padding(
+                        padding: const EdgeInsets.only(top: 14, bottom: 2),
+                        child: node.widget,
+                      );
+                    }
+                    return Padding(
+                      padding: const EdgeInsets.only(
+                        top: 6,
+                        bottom: 4,
+                        left: 16,
+                      ),
+                      child: node.widget!,
+                    );
+                  },
                 ),
               ),
             ),
