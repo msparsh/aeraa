@@ -6,6 +6,7 @@ class TaskItem {
   int id;
   String description;
   List<String> boards;
+  List<String> tags;
   int priority;
   bool isStarred;
   bool isComplete;
@@ -20,6 +21,7 @@ class TaskItem {
     required this.id,
     required this.description,
     required this.boards,
+    required this.tags,
     this.priority = 1,
     this.isStarred = false,
     this.isComplete = false,
@@ -36,6 +38,7 @@ class TaskItem {
       id: newId ?? id,
       description: description,
       boards: List.from(boards),
+      tags: List.from(tags),
       priority: priority,
       isStarred: isStarred,
       isComplete: isComplete,
@@ -52,6 +55,7 @@ class TaskItem {
     'id': id,
     'description': description,
     'boards': boards,
+    'tags': tags,
     'priority': priority,
     'isStarred': isStarred,
     'isComplete': isComplete,
@@ -67,6 +71,7 @@ class TaskItem {
     id: json['id'],
     description: json['description'],
     boards: List<String>.from(json['boards'] ?? []),
+    tags: List<String>.from(json['tags'] ?? []),
     priority: json['priority'] ?? 1,
     isStarred: json['isStarred'] ?? false,
     isComplete: json['isComplete'] ?? false,

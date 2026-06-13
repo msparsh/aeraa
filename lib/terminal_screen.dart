@@ -28,7 +28,7 @@ class _TerminalScreenState extends State<TerminalScreen> {
       '''task / -t / add description @board p:2                 : create task
 note / -n description @board                           : create note
 sub / subtask id description                           : create subtask under parent
-list / ls / -l [@board] [flags]                        : list items (flags: star,done,progress,pending,task,note)
+list / ls / -l [@board] [#tag] [flags] [keywords]      : search and super-filter items
 board                                                  : dashboard view
 timeline / -i                                          : timeline by creation date
 archive / -a [id1 id2 ...]                             : view archive OR toggle archive state
@@ -40,9 +40,9 @@ sweep                                                  : remove all completed ta
 edit / -e id new description                           : change description
 move / mv / -m id parent_id                            : nest under another task
 move / mv / -m id @board1 @board2 ...                  : move to board(s) (unlinks)
+tag id #tag1 [#tag2 ...]                               : toggle tag(s) on item
 priority / -p id [1|2|3]                               : cycle priority OR set to 1/2/3
 due id DD-MM-YYYY | none                               : set or remove due date
-find / -f keyword                                      : search descriptions
 help / -h / --help                                     : show this menu''';
 
   @override
@@ -164,47 +164,42 @@ help / -h / --help                                     : show this menu''';
         _addResponse(res.error ? 'Error: ${res.msg}' : res.msg);
 
       case 'list' || '-l' || 'ls':
-        if (tailArgs.isEmpty) {
-          _addResponse('No items match.');
+        final filtered = tb.filterItems(tailArgs);
+        if (filtered.isEmpty) {
+          _addResponse('No items match your filter.');
         } else {
-          final flags = <String>[];
-          final boards = <String>[];
-          for (var tok in tailArgs) {
-            if (tok.startsWith('@') || tok.toLowerCase() == 'inbox') {
-              boards.add(tok);
-            } else {
-              flags.add(tok);
-            }
+          final rootItems = filtered.values
+              .where((it) => it.parentId == null)
+              .toList();
+          rootItems.sort((a, b) => a.id.compareTo(b.id));
+          final spans = <InlineSpan>[];
+          for (var it in rootItems) {
+            spans.addAll(tb._formatItemLine(it));
+            spans.add(const TextSpan(text: '\n'));
           }
-          final filtered = tb.listByAttributesAndBoards(flags, boards);
-          if (filtered.isEmpty) {
-            _addResponse('No items match.');
-          } else {
-            final rootItems = filtered.values
-                .where((it) => it.parentId == null)
-                .toList();
-            rootItems.sort((a, b) => a.id.compareTo(b.id));
-            final spans = <InlineSpan>[];
-            for (var it in rootItems) {
-              spans.addAll(tb._formatItemLine(it));
-              spans.add(const TextSpan(text: '\n'));
-            }
-            if (spans.isNotEmpty) spans.removeLast();
-            _addNode(
-              widget: RichText(
-                text: TextSpan(
-                  style: const TextStyle(
-                    fontFamily: 'JetBrains Mono',
-                    fontFamilyFallback: _kMono,
-                    fontSize: _kFontSize,
-                    height: _kLineH,
-                    color: Color(0xFFCCCCCC),
-                  ),
-                  children: spans,
+          if (spans.isNotEmpty) spans.removeLast();
+          _addNode(
+            widget: RichText(
+              text: TextSpan(
+                style: const TextStyle(
+                  fontFamily: 'JetBrains Mono',
+                  fontFamilyFallback: _kMono,
+                  fontSize: _kFontSize,
+                  height: _kLineH,
+                  color: Color(0xFFCCCCCC),
                 ),
+                children: spans,
               ),
-            );
-          }
+            ),
+          );
+        }
+
+      case 'tag':
+        if (tailArgs.length < 2) {
+          _addResponse('Usage: tag id #tag1 [#tag2 ...]');
+        } else {
+          final res = tb.toggleTag(tailArgs[0], tailArgs.sublist(1));
+          _addResponse(res.error ? 'Error: ${res.msg}' : res.msg);
         }
 
       case 'check' || '-c':
@@ -300,24 +295,6 @@ help / -h / --help                                     : show this menu''';
 
       case 'timeline' || '-i':
         _addNode(widget: tb.getTimelineView());
-
-      case 'find' || '-f':
-        final matches = tb.findItems(tailArgs);
-        if (matches.isEmpty) {
-          _addResponse('No matches.');
-        } else {
-          final matchesList = matches.values.toList()
-            ..sort((a, b) => a.id.compareTo(b.id));
-          final spans = <InlineSpan>[];
-          for (var it in matchesList) {
-            spans.addAll(tb._formatItemLine(it));
-            spans.add(const TextSpan(text: '\n'));
-          }
-          if (spans.isNotEmpty) spans.removeLast();
-          _addNode(
-            widget: RichText(text: TextSpan(children: spans)),
-          );
-        }
 
       default:
         _addResponse('Command not recognized: "$mainCmd"\n\n$_helpMenu');

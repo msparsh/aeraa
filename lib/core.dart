@@ -67,9 +67,15 @@ class Core {
     );
   }
 
-  ({List<String> boards, int priority, String description, String? dueDate})
+  ({
+    List<String> boards,
+    List<String> tags,
+    int priority,
+    String description,
+    String? dueDate,
+  })
   _parseOptions(List<String> args) {
-    final boards = <String>[], descWords = <String>[];
+    final boards = <String>[], tags = <String>[], descWords = <String>[];
     int priority = 1;
     String? dueDate;
 
@@ -77,6 +83,8 @@ class Core {
       final lower = t.toLowerCase();
       if (t.startsWith('@') && t.length > 1) {
         boards.add(t);
+      } else if (lower.startsWith('#') && t.length > 1) {
+        tags.add(lower);
       } else if (lower.startsWith('p:') && t.length == 3) {
         priority = int.tryParse(t[2])?.clamp(1, 3) ?? 1;
       } else if (lower.startsWith('due:') &&
@@ -89,6 +97,7 @@ class Core {
 
     return (
       boards: boards.isEmpty ? ['inbox'] : boards,
+      tags: tags,
       priority: priority,
       description: descWords.join(' ').trim(),
       dueDate: dueDate,
@@ -116,6 +125,7 @@ class Core {
       id: id,
       description: parsed.description,
       boards: parsed.boards,
+      tags: parsed.tags,
       priority: isTask ? parsed.priority : 1,
       dueDate: isTask ? parsed.dueDate : null,
       dateString: meta.dateString,
@@ -417,6 +427,41 @@ class Core {
     return toggleArchive(toDelete);
   }
 
+  ({bool error, String msg}) toggleTag(String idRaw, List<String> targetTags) {
+    final item = _getItem(idRaw);
+    if (item == null) return (error: true, msg: 'ID $idRaw not found');
+
+    final formattedTags = targetTags
+        .where((t) => t.startsWith('#') && t.length > 1)
+        .map((t) => t.toLowerCase())
+        .toList();
+
+    if (formattedTags.isEmpty)
+      return (error: true, msg: 'Provide at least one #tag to toggle');
+
+    final added = <String>[];
+    final removed = <String>[];
+
+    for (var t in formattedTags) {
+      if (item.tags.contains(t)) {
+        item.tags.remove(t);
+        removed.add(t);
+      } else {
+        item.tags.add(t);
+        added.add(t);
+      }
+    }
+
+    _save();
+    final parts = <String>[];
+    if (added.isNotEmpty) parts.add('Added: ${added.join(' ')}');
+    if (removed.isNotEmpty) parts.add('Removed: ${removed.join(' ')}');
+    return (
+      error: false,
+      msg: 'Updated [${item.id}] tags -> ${parts.join(', ')}',
+    );
+  }
+
   // --- VIEW GENERATORS ---
 
   Widget _buildRichText(
@@ -619,51 +664,64 @@ class Core {
     return _buildRichText(spans);
   }
 
-  Map<int, TaskItem> findItems(List<String> terms) {
-    final lower = terms.map((t) => t.toLowerCase()).toList();
-    return Map.fromEntries(
-      items.entries.where(
-        (e) => lower.any(
-          (term) => e.value.description.toLowerCase().contains(term),
-        ),
-      ),
-    );
-  }
+  Map<int, TaskItem> filterItems(List<String> args) {
+    final boards = <String>{};
+    final reqTags = <String>{};
+    final exclTags = <String>{};
+    final flags = <String>{};
+    final searchTerms = <String>[];
 
-  Map<int, TaskItem> filterByAttributes(List<String> attrList) {
-    final attrs = attrList.map((a) => a.toLowerCase()).toSet();
-    return Map.fromEntries(
-      items.entries.where((e) {
-        final v = e.value;
-        return attrs.every(
-          (a) => switch (a) {
-            'star' || 'starred' => v.isStarred,
-            'done' || 'complete' || 'checked' => v.isTask && v.isComplete,
-            'progress' ||
-            'started' => v.isTask && v.inProgress && !v.isComplete,
-            'pending' ||
-            'unchecked' => v.isTask && !v.isComplete && !v.inProgress,
-            'task' || 'tasks' => v.isTask,
-            'note' || 'notes' => !v.isTask,
-            _ => true,
-          },
-        );
-      }),
-    );
-  }
+    // The definitive list of system flags
+    final knownFlags = {
+      'star', 'starred', 'done', 'complete', 'checked', 
+      'progress', 'started', 'pending', 'unchecked', 
+      'task', 'tasks', 'note', 'notes'
+    };
 
-  Map<int, TaskItem> listByAttributesAndBoards(
-    List<String> flags,
-    List<String> boards,
-  ) {
-    final filtered = filterByAttributes(flags);
-    if (boards.isNotEmpty) {
-      final boardSet = boards
-          .map((b) => b == 'inbox' ? 'inbox' : (b.startsWith('@') ? b : '@$b'))
-          .toSet();
-      filtered.removeWhere((_, v) => !v.boards.any(boardSet.contains));
+    for (var arg in args) {
+      final lower = arg.toLowerCase();
+      if (lower.startsWith('@')) {
+        boards.add(lower == '@inbox' ? 'inbox' : lower);
+      } else if (lower.startsWith('-#') && lower.length > 2) {
+        exclTags.add('#${lower.substring(2)}');
+      } else if (lower.startsWith('#') && lower.length > 1) {
+        reqTags.add(lower);
+      } else if (knownFlags.contains(lower)) {
+        flags.add(lower);
+      } else {
+        searchTerms.add(lower); // Unrecognized text becomes a search term!
+      }
     }
-    return filtered;
+
+    return Map.fromEntries(items.entries.where((e) {
+      final v = e.value;
+      
+      // 1. Boards Check (OR logic)
+      if (boards.isNotEmpty && !v.boards.any(boards.contains)) return false;
+      
+      // 2. Required Tags Check (AND logic)
+      if (reqTags.isNotEmpty && !reqTags.every(v.tags.contains)) return false;
+
+      // 3. Excluded Tags Check (NOT logic)
+      if (exclTags.isNotEmpty && exclTags.any(v.tags.contains)) return false;
+
+      // 4. Keyword Search Check (AND logic for precision)
+      if (searchTerms.isNotEmpty) {
+        final desc = v.description.toLowerCase();
+        if (!searchTerms.every((term) => desc.contains(term))) return false;
+      }
+
+      // 5. State Flags Check
+      return flags.every((f) => switch (f) {
+        'star' || 'starred' => v.isStarred,
+        'done' || 'complete' || 'checked' => v.isTask && v.isComplete,
+        'progress' || 'started' => v.isTask && v.inProgress && !v.isComplete,
+        'pending' || 'unchecked' => v.isTask && !v.isComplete && !v.inProgress,
+        'task' || 'tasks' => v.isTask,
+        'note' || 'notes' => !v.isTask,
+        _ => true,
+      });
+    }));
   }
 
   List<InlineSpan> _formatItemLine(
@@ -748,6 +806,15 @@ class Core {
           style: TextStyle(color: cYellow),
         ),
       );
+
+    if (item.tags.isNotEmpty) {
+      spans.add(
+        TextSpan(
+          text: '  ${item.tags.join(' ')}',
+          style: const TextStyle(color: Color(0xFFC678DD)),
+        ),
+      );
+    }
 
     final children =
         items.values
