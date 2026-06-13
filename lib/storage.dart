@@ -23,15 +23,28 @@ class StorageService {
     return File('$dirPath${separator}todo.json');
   }
 
-  /// Writes data to the JSON file
+  Future<void>? _pendingWrite;
+
+  /// Writes data to the JSON file atomically (write to a temp file, then
+  /// rename over the real file) so a crash mid-write can't corrupt the data.
+  /// Writes are also chained so concurrent saves don't race each other.
   Future<void> saveData(Map<String, dynamic> data) async {
-    try {
-      final file = await _localFile;
-      final jsonString = jsonEncode(data);
-      await file.writeAsString(jsonString);
-    } catch (e) {
-      print("Error saving data: $e ⚠️");
-    }
+    final previous = _pendingWrite;
+    final completer = () async {
+      if (previous != null) {
+        await previous.catchError((_) {});
+      }
+      try {
+        final file = await _localFile;
+        final jsonString = jsonEncode(data);
+        final tmp = File('${file.path}.tmp');
+        await tmp.writeAsString(jsonString, flush: true);
+        await tmp.rename(file.path);
+      } catch (e) {
+        print("Error saving data: $e ⚠️");
+      }
+    }();
+    _pendingWrite = completer;
   }
 
   /// Reads and parses data from the JSON file

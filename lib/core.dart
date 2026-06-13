@@ -21,19 +21,29 @@ class Core {
     final data = await _storage.loadData();
     if (data != null) {
       if (data['items'] != null) {
-        final Map<String, dynamic> itemsData = data['items'];
-        items = itemsData.map(
-          (key, value) => MapEntry(int.parse(key), TaskItem.fromJson(value)),
-        );
+        items = _decodeMap(data['items']);
       }
       if (data['archive'] != null) {
-        final Map<String, dynamic> archiveData = data['archive'];
-        archive = archiveData.map(
-          (key, value) => MapEntry(int.parse(key), TaskItem.fromJson(value)),
-        );
+        archive = _decodeMap(data['archive']);
       }
     }
     _refreshNextId();
+  }
+
+  /// Safely decodes a stored id->item map, skipping any malformed entries
+  /// instead of letting one bad record crash startup.
+  Map<int, TaskItem> _decodeMap(dynamic raw) {
+    final result = <int, TaskItem>{};
+    if (raw is! Map) return result;
+    raw.forEach((key, value) {
+      try {
+        final id = int.parse(key.toString());
+        result[id] = TaskItem.fromJson(value as Map<String, dynamic>);
+      } catch (_) {
+        // Skip corrupted entry rather than failing the whole load.
+      }
+    });
+    return result;
   }
 
   void _refreshNextId() {
@@ -104,11 +114,11 @@ class Core {
 
   ({bool error, String msg, int? id}) createTask(List<String> args) {
     if (args.isEmpty) {
-      return (error: true, msg: 'Error: task description required', id: null);
+      return (error: true, msg: 'task description required', id: null);
     }
     final parsed = _parseOptions(args);
     if (parsed.description.isEmpty) {
-      return (error: true, msg: 'Error: empty description', id: null);
+      return (error: true, msg: 'empty description', id: null);
     }
 
     final id = _generateId();
@@ -133,11 +143,11 @@ class Core {
 
   ({bool error, String msg}) createNote(List<String> args) {
     if (args.isEmpty) {
-      return (error: true, msg: 'Error: note description required');
+      return (error: true, msg: 'note description required');
     }
     final parsed = _parseOptions(args);
     if (parsed.description.isEmpty) {
-      return (error: true, msg: 'Error: empty description');
+      return (error: true, msg: 'empty description');
     }
 
     final id = _generateId();
@@ -773,7 +783,10 @@ class Core {
     TaskItem item, {
     int indent = 0,
     List<String>? parentBoards,
+    Set<int>? visited,
   }) {
+    final seen = visited ?? <int>{};
+    seen.add(item.id);
     final spans = <InlineSpan>[];
     final spacing = ' ' * (indent == 0 ? 2 : indent);
 
@@ -883,7 +896,9 @@ class Core {
       );
     }
 
-    final children = items.values.where((c) => c.parentId == item.id).toList();
+    final children = items.values
+        .where((c) => c.parentId == item.id && !seen.contains(c.id))
+        .toList();
     if (children.isNotEmpty) {
       children.sort((a, b) => a.id.compareTo(b.id));
       for (var child in children) {
@@ -893,6 +908,7 @@ class Core {
             child,
             indent: indent == 0 ? 6 : indent + 4,
             parentBoards: parentBoards ?? item.boards,
+            visited: seen,
           ),
         );
       }
