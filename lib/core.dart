@@ -866,13 +866,26 @@ class Core {
             style: TextStyle(color: cYellow),
           ),
         );
-      if (item.dueDate != null)
+
+      if (item.dueDate != null) {
+        final now = DateTime.now();
+        final todayStr =
+            '${now.day.toString().padLeft(2, '0')}-${now.month.toString().padLeft(2, '0')}-${now.year}';
+
+        Color dueColor = cDim;
+        if (_isOverdue(item.dueDate!)) {
+          dueColor = cRed;
+        } else if (item.dueDate == todayStr) {
+          dueColor = cYellow;
+        }
+
         spans.add(
           TextSpan(
             text: ' [due: ${item.dueDate}]',
-            style: TextStyle(color: _isOverdue(item.dueDate!) ? cRed : cDim),
+            style: TextStyle(color: dueColor),
           ),
         );
+      }
     }
 
     final age = _getAge(item.timestamp);
@@ -895,7 +908,7 @@ class Core {
       spans.add(
         TextSpan(
           text: '  ${item.tags.join(' ')}',
-          style: const TextStyle(color: Color(0xFFC678DD)),
+          style: const TextStyle(color: cDim),
         ),
       );
     }
