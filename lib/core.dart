@@ -612,6 +612,11 @@ class Core {
     }
 
     final footerSpans = <InlineSpan>[
+      // 👇 NEW: The missing percentage line!
+      TextSpan(
+        text: '${stats.percent}% of all tasks complete.\n',
+        style: const TextStyle(color: cDim),
+      ),
       TextSpan(
         text: '${stats.complete}',
         style: const TextStyle(color: cGreen),
@@ -645,7 +650,6 @@ class Core {
         style: TextStyle(color: cDim),
       ),
     ];
-
     return _buildRichText(spans, footerSpans: footerSpans);
   }
 
