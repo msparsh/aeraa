@@ -44,7 +44,8 @@ void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await windowManager.ensureInitialized();
   windowManager.waitUntilReadyToShow().then((_) async {
-    await windowManager.setTitle('');
+    await windowManager.setTitleBarStyle(TitleBarStyle.hidden);
+    await windowManager.show();
   });
   runApp(const TaskbookApp());
 }

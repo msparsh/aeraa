@@ -415,48 +415,71 @@ SYSTEM
       backgroundColor: _kBg,
       body: GestureDetector(
         onTap: () => _focusNode.requestFocus(),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
+        child: Stack(
           children: [
-            // ── Output area ─────────────────────────────────────────────────
-            Expanded(
-              child: Container(
-                color: _kBg,
-                padding: const EdgeInsets.symmetric(horizontal: 20),
-                child: ListView.builder(
-                  controller: _scrollController,
-                  itemCount: _outputHistory.length,
-                  itemBuilder: (context, index) {
-                    final node = _outputHistory[index];
-                    if (node.command != null) {
-                      return Padding(
-                        padding: const EdgeInsets.only(top: 14, bottom: 2),
-                        child: node.widget,
-                      );
-                    }
-                    return Padding(
+            // ── Content ─────────────────────────────────────────────────────
+            Positioned.fill(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  // ── Output area ─────────────────────────────────────────────
+                  Expanded(
+                    child: Container(
+                      color: _kBg,
                       padding: const EdgeInsets.only(
-                        top: 6,
-                        bottom: 4,
-                        left: 16,
+                        left: 20,
+                        right: 20,
+                        top: 10,
                       ),
-                      child: node.widget!,
-                    );
-                  },
-                ),
+                      child: ListView.builder(
+                        controller: _scrollController,
+                        itemCount: _outputHistory.length,
+                        itemBuilder: (context, index) {
+                          final node = _outputHistory[index];
+                          if (node.command != null) {
+                            return Padding(
+                              padding: const EdgeInsets.only(top: 14, bottom: 2),
+                              child: node.widget,
+                            );
+                          }
+                          return Padding(
+                            padding: const EdgeInsets.only(
+                              top: 6,
+                              bottom: 4,
+                              left: 16,
+                            ),
+                            child: node.widget!,
+                          );
+                        },
+                      ),
+                    ),
+                  ),
+
+                  // ── Input row ───────────────────────────────────────────────────
+                  _InputBar(
+                    cmdController: _cmdController,
+                    focusNode: _focusNode,
+                    isNavigating: _isNavigating,
+                    onChanged: (_) {
+                      if (!_isNavigating) _historyPos = _cmdHistory.length;
+                    },
+                    onSubmitted: _submitCommand,
+                    onKeyEvent: _handleKeyEvent,
+                  ),
+                ],
               ),
             ),
 
-            // ── Input row ───────────────────────────────────────────────────
-            _InputBar(
-              cmdController: _cmdController,
-              focusNode: _focusNode,
-              isNavigating: _isNavigating,
-              onChanged: (_) {
-                if (!_isNavigating) _historyPos = _cmdHistory.length;
-              },
-              onSubmitted: _submitCommand,
-              onKeyEvent: _handleKeyEvent,
+            // ── Overlay Title Bar ───────────────────────────────────────────
+            Positioned(
+              top: 0,
+              left: 0,
+              right: 0,
+              height: kWindowCaptionHeight,
+              child: const WindowCaption(
+                brightness: Brightness.dark,
+                backgroundColor: Colors.transparent,
+              ),
             ),
           ],
         ),

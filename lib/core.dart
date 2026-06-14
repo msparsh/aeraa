@@ -576,6 +576,7 @@ class Core {
     final stats = _computeStats();
     final spans = <InlineSpan>[];
 
+    bool isFirst = true;
     for (var board in groups.keys) {
       final itemsList = groups[board]!;
       if (itemsList.isEmpty) continue;
@@ -584,8 +585,12 @@ class Core {
       final doneCount = tasks.where((i) => i.isComplete).length;
       final boardName = board == 'inbox' ? '@inbox' : board;
 
+      if (!isFirst) {
+        spans.add(const TextSpan(text: '\n'));
+      }
+      isFirst = false;
+
       spans.addAll([
-        const TextSpan(text: '\n'),
         TextSpan(
           text: boardName,
           style: const TextStyle(
