@@ -227,9 +227,23 @@ class Core {
         return item.isStarred ? 'Starred' : 'Unstarred';
       });
 
+  /// Recursively collects an item and all its nested subtasks from a given pool.
+  Set<int> _getFamilyTree(int rootId, Map<int, TaskItem> pool) {
+    final family = <int>{};
+    void collect(int currentId) {
+      if (!family.add(currentId)) return; // Prevent cycles
+      pool.values
+          .where((it) => it.parentId == currentId)
+          .forEach((c) => collect(c.id));
+    }
+    collect(rootId);
+    return family;
+  }
+
   ({bool error, String msg}) toggleArchive(List<String> idsRaw) {
     final toggled = <String>[];
     final notFound = <String>[];
+    final processed = <int>{}; // 👈 CRITICAL: Track IDs to prevent double-bouncing!
 
     for (var raw in idsRaw) {
       final id = int.tryParse(raw);
@@ -238,57 +252,43 @@ class Core {
         continue;
       }
 
+      // 👈 CRITICAL: Skip if already moved as part of a parent's family tree
+      if (processed.contains(id)) continue;
+
       if (items.containsKey(id)) {
-        // Active -> Archive (plus all subtasks) 🗄️⬇️
-        final toArchive = <int>{};
-        void collect(int currentId) {
-          if (!toArchive.add(currentId)) return;
-          items.values
-              .where((it) => it.parentId == currentId)
-              .forEach((c) => collect(c.id));
+        // Active -> Archive 🗄️⬇️
+        final family = _getFamilyTree(id, items);
+        for (var fId in family) {
+          final item = items.remove(fId);
+          if (item != null) archive[fId] = item;
         }
-
-        collect(id);
-
-        for (var aId in toArchive) {
-          final item = items.remove(aId);
-          if (item != null) archive[aId] = item;
-        }
+        processed.addAll(family); // 👈 Mark family as processed
         toggled.add('$id (archived)');
       } else if (archive.containsKey(id)) {
-        // Archive -> Active (plus all subtasks!) 🗂️⬆️
-        final toRestore = <int>{};
-        void collectRestore(int currentId) {
-          if (!toRestore.add(currentId)) return;
-          archive.values
-              .where((it) => it.parentId == currentId)
-              .forEach((c) => collectRestore(c.id));
-        }
-
-        collectRestore(id);
-
-        for (var rId in toRestore) {
-          final item = archive.remove(rId);
+        // Archive -> Active 🗂️⬆️
+        final family = _getFamilyTree(id, archive);
+        for (var fId in family) {
+          final item = archive.remove(fId);
           if (item != null) {
-            items[rId] = item;
-
-            // If the explicitly requested item has a parent that is STILL in the archive,
-            // we sever the tie so it becomes a root item on the active board. ✂️
-            if (rId == id &&
+            items[fId] = item;
+            // Sever tie if parent is still archived
+            if (fId == id &&
                 item.parentId != null &&
                 !items.containsKey(item.parentId)) {
               item.parentId = null;
             }
           }
         }
+        processed.addAll(family); // 👈 Mark family as processed
         toggled.add('$id (restored)');
       } else {
         notFound.add(raw);
       }
     }
 
-    if (toggled.isEmpty)
+    if (toggled.isEmpty) {
       return (error: true, msg: 'IDs not found: ${notFound.join(', ')} 🤷♂️');
+    }
 
     _save();
     return (error: false, msg: ' ${toggled.join(', ')} ');
