@@ -25,7 +25,7 @@ class Core {
       if (data['nextId'] != null) {
         _nextId = data['nextId'] as int;
       } else {
-        _refreshNextId(); 
+        _refreshNextId();
       }
     }
   }
@@ -103,9 +103,12 @@ class Core {
         tags.add(lower);
       } else if (lower.startsWith('p:') && t.length == 3) {
         priority = int.tryParse(t[2])?.clamp(1, 3) ?? 1;
-      } else if (lower.startsWith('due:') &&
-          RegExp(r'^due:\d{2}-\d{2}-\d{4}$').hasMatch(lower)) {
-        dueDate = t.substring(4);
+      } else if (lower.startsWith('due:')) {
+        if (RegExp(r'^due:\d{2}-\d{2}-\d{4}$').hasMatch(lower)) {
+          dueDate = t.substring(4);
+        } else {
+          throw FormatException('Invalid due date format. Use DD-MM-YYYY 📅');
+        }
       } else {
         descWords.add(t);
       }
@@ -131,7 +134,17 @@ class Core {
         id: null,
       );
 
-    final parsed = _parseOptions(args);
+    var parsed;
+    try {
+      parsed = _parseOptions(args);
+    } catch (e) {
+      return (
+        error: true,
+        msg: e.toString().replaceFirst('FormatException: ', ''),
+        id: null,
+      );
+    }
+
     if (parsed.description.isEmpty)
       return (error: true, msg: 'empty description', id: null);
 
@@ -236,6 +249,7 @@ class Core {
           .where((it) => it.parentId == currentId)
           .forEach((c) => collect(c.id));
     }
+
     collect(rootId);
     return family;
   }
@@ -243,7 +257,8 @@ class Core {
   ({bool error, String msg}) toggleArchive(List<String> idsRaw) {
     final toggled = <String>[];
     final notFound = <String>[];
-    final processed = <int>{}; // 👈 CRITICAL: Track IDs to prevent double-bouncing!
+    final processed =
+        <int>{}; // 👈 CRITICAL: Track IDs to prevent double-bouncing!
 
     for (var raw in idsRaw) {
       final id = int.tryParse(raw);
@@ -466,12 +481,12 @@ class Core {
     if (item == null) return (error: true, msg: 'ID $idRaw not found');
 
     final formattedTags = targetTags
-        .where((t) => t.startsWith('#') && t.length > 1)
-        .map((t) => t.toLowerCase())
+        .map((t) => t.startsWith('#') ? t.toLowerCase() : '#${t.toLowerCase()}')
+        .where((t) => t.length > 1)
         .toList();
 
     if (formattedTags.isEmpty)
-      return (error: true, msg: 'Provide at least one #tag to toggle');
+      return (error: true, msg: 'Provide at least one valid tag to toggle');
 
     final added = <String>[];
     final removed = <String>[];

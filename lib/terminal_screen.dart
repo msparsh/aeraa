@@ -176,7 +176,9 @@ help / -h / --help                                     : show this menu''';
       return;
     }
 
-    final args = trimmed.split(RegExp(r'\s+'));
+    final matches = RegExp(r'[^\s"]+|"([^"]*)"').allMatches(trimmed);
+    final args = matches.map((m) => m.group(1) ?? m.group(0)!).toList();
+
     final mainCmd = args[0].toLowerCase();
     final tailArgs = args.sublist(1);
 
@@ -290,7 +292,12 @@ help / -h / --help                                     : show this menu''';
       case 'move' || 'mv' || '-m' || 'm':
         final id = tailArgs[0];
         final targetFlag = tailArgs[1];
+
         if (RegExp(r'^\d+$').hasMatch(targetFlag)) {
+          if (tailArgs.length > 2) {
+            _addResponse('Error: Reparenting only takes one target ID.');
+            return;
+          }
           final res = tb.reparentTask(id, targetFlag);
           _addResponse(res.error ? 'Error: ${res.msg}' : res.msg);
         } else {
@@ -304,7 +311,7 @@ help / -h / --help                                     : show this menu''';
         final res = tb.createSubtask(tailArgs[0], tailArgs.sublist(1));
         _addResponse(res.error ? 'Error: ${res.msg}' : res.msg);
 
-      case 'priority' || '-p' when tailArgs.isEmpty:
+      case 'priority' || '-p' when tailArgs.isEmpty || tailArgs.length > 2:
         _addResponse('Usage: priority id [1|2|3]');
       case 'priority' || '-p':
         final res = tb.updatePriority(
@@ -313,13 +320,13 @@ help / -h / --help                                     : show this menu''';
         );
         _addResponse(res.error ? 'Error: ${res.msg}' : res.msg);
 
-      case 'due' when tailArgs.length < 2:
-        _addResponse('Usage: due id DD-MM-YYYY (or "none" to remove)');
+      case 'due' when tailArgs.isEmpty || tailArgs.length > 2:
+        _addResponse('Usage: due id [DD-MM-YYYY] (leave date blank to remove)');
       case 'due':
-        final res = tb.updateDue(tailArgs[0], tailArgs[1]);
+        final targetDate = tailArgs.length > 1 ? tailArgs[1] : 'none';
+        final res = tb.updateDue(tailArgs[0], targetDate);
         _addResponse(res.error ? 'Error: ${res.msg}' : res.msg);
 
-      // 💡 Improved: Distinct logic paths for 'archive' vs 'restore' empty states!
       case 'archive' || '-a' when tailArgs.isEmpty:
         _addNode(widget: tb.getArchiveView());
       case 'restore' || '-r' when tailArgs.isEmpty:
