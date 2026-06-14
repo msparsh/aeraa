@@ -287,10 +287,7 @@ class Core {
       return (error: true, msg: 'IDs not found: ${notFound.join(', ')} 🤷♂️');
 
     _save();
-    return (
-      error: false,
-      msg: 'Toggled archive state: ${toggled.join(', ')} ✅',
-    );
+    return (error: false, msg: ' ${toggled.join(', ')} ');
   }
 
   ({bool error, String msg}) editItem(String idRaw, String newDesc) {
@@ -678,7 +675,7 @@ class Core {
 
     final spans = <InlineSpan>[
       const TextSpan(
-        text: 'ARCHIVE\n\n',
+        text: 'ARCHIVED ITEMS\n',
         style: TextStyle(
           color: Color(0xFFEEEEEE),
           fontWeight: FontWeight.w600,

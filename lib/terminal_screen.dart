@@ -108,6 +108,67 @@ help / -h / --help                                     : show this menu''';
     );
   }
 
+  /// Universal method to display a list of items based on filter arguments 📋
+  void _displayList(List<String> filterArgs) {
+    final filtered = tb.filterItems(filterArgs);
+    if (filtered.isEmpty) {
+      _addResponse('No items match your criteria. 📭');
+      return;
+    }
+
+    final rootItems = filtered.values
+        .where((it) => it.parentId == null)
+        .toList();
+    rootItems.sort((a, b) => a.id.compareTo(b.id));
+
+    final spans = <InlineSpan>[];
+    for (var it in rootItems) {
+      spans.addAll(tb._formatItemLine(it));
+      spans.add(const TextSpan(text: '\n'));
+    }
+    if (spans.isNotEmpty) spans.removeLast();
+
+    _addNode(
+      widget: RichText(
+        text: TextSpan(
+          style: const TextStyle(
+            fontFamily: 'JetBrains Mono',
+            fontFamilyFallback: _kMono,
+            fontSize: _kFontSize,
+            height: _kLineH,
+            color: Color(0xFFCCCCCC),
+          ),
+          children: spans,
+        ),
+      ),
+    );
+  }
+
+  /// Reusable dispatcher: Executes an action if IDs are provided,
+  /// OR displays a filtered view if arguments are empty. 🚦
+  void _executeOrView(
+    List<String> args, {
+    required ({bool error, String msg}) Function(List<String>) action,
+    String? viewFlag,
+    String? usageMsg,
+  }) {
+    if (args.isEmpty) {
+      if (viewFlag != null) {
+        // e.g., 'star' with no args -> show all starred items 🌟
+        _displayList([viewFlag]);
+      } else if (usageMsg != null) {
+        // e.g., 'move' with no args -> show usage error ❌
+        _addResponse(usageMsg);
+      } else {
+        _addResponse('Error: Missing arguments. ⚠️');
+      }
+    } else {
+      // Execute the actual core function! ⚡
+      final res = action(args);
+      _addResponse(res.error ? 'Error: ${res.msg}' : res.msg);
+    }
+  }
+
   void _handleCommand(String raw, [Set<String>? visited]) {
     final trimmed = raw.trim();
     if (trimmed.isEmpty) {
@@ -185,35 +246,8 @@ help / -h / --help                                     : show this menu''';
         _addResponse(res.error ? 'Error: ${res.msg}' : res.msg);
 
       case 'list' || '-l' || 'ls':
-        final filtered = tb.filterItems(tailArgs);
-        if (filtered.isEmpty) {
-          _addResponse('No items match your filter.');
-        } else {
-          final rootItems = filtered.values
-              .where((it) => it.parentId == null)
-              .toList();
-          rootItems.sort((a, b) => a.id.compareTo(b.id));
-          final spans = <InlineSpan>[];
-          for (var it in rootItems) {
-            spans.addAll(tb._formatItemLine(it));
-            spans.add(const TextSpan(text: '\n'));
-          }
-          if (spans.isNotEmpty) spans.removeLast();
-          _addNode(
-            widget: RichText(
-              text: TextSpan(
-                style: const TextStyle(
-                  fontFamily: 'JetBrains Mono',
-                  fontFamilyFallback: _kMono,
-                  fontSize: _kFontSize,
-                  height: _kLineH,
-                  color: Color(0xFFCCCCCC),
-                ),
-                children: spans,
-              ),
-            ),
-          );
-        }
+        // Just route directly to our new display method 📜
+        _displayList(tailArgs);
 
       case 'tag':
         if (tailArgs.length < 2) {
@@ -224,16 +258,16 @@ help / -h / --help                                     : show this menu''';
         }
 
       case 'check' || '-c':
-        final res = tb.checkTasks(tailArgs);
-        _addResponse(res.error ? 'Error: ${res.msg}' : res.msg);
+        // BONUS: You can reuse it for 'check' immediately! ✅
+        _executeOrView(tailArgs, action: tb.checkTasks, viewFlag: 'done');
 
       case 'begin' || '-b':
-        final res = tb.beginTasks(tailArgs);
-        _addResponse(res.error ? 'Error: ${res.msg}' : res.msg);
+        // BONUS: Reused for 'begin' too! 🚀
+        _executeOrView(tailArgs, action: tb.beginTasks, viewFlag: 'progress');
 
       case 'star' || '-s':
-        final res = tb.starItems(tailArgs);
-        _addResponse(res.error ? 'Error: ${res.msg}' : res.msg);
+        // MAGIC: Reuses the dispatcher! ✨
+        _executeOrView(tailArgs, action: tb.starItems, viewFlag: 'star');
 
       case 'delete' || '-d':
         final res = tb.toggleArchive(tailArgs);
