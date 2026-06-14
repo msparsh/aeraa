@@ -8,7 +8,7 @@ class StorageService {
     String? home =
         Platform.environment['HOME'] ?? Platform.environment['USERPROFILE'];
     if (home == null) {
-      throw Exception("Could not determine home directory. 🛑");
+      throw Exception("Could not determine home directory.");
     }
 
     final separator = Platform.pathSeparator;
@@ -41,7 +41,7 @@ class StorageService {
         await tmp.writeAsString(jsonString, flush: true);
         await tmp.rename(file.path);
       } catch (e) {
-        print("Error saving data: $e ⚠️");
+        print("Error saving data: $e ");
       }
     }();
     _pendingWrite = completer;
@@ -57,7 +57,7 @@ class StorageService {
       final contents = await file.readAsString();
       return jsonDecode(contents) as Map<String, dynamic>;
     } catch (e) {
-      print("Error loading data: $e ⚠️");
+      print("Error loading data: $e ");
       return null;
     }
   }

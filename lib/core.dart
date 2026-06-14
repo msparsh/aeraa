@@ -107,7 +107,7 @@ class Core {
         if (RegExp(r'^due:\d{2}-\d{2}-\d{4}$').hasMatch(lower)) {
           dueDate = t.substring(4);
         } else {
-          throw FormatException('Invalid due date format. Use DD-MM-YYYY 📅');
+          throw FormatException('Invalid due date format. Use DD-MM-YYYY');
         }
       } else {
         descWords.add(t);
@@ -302,7 +302,7 @@ class Core {
     }
 
     if (toggled.isEmpty) {
-      return (error: true, msg: 'IDs not found: ${notFound.join(', ')} 🤷♂️');
+      return (error: true, msg: 'IDs not found: ${notFound.join(', ')}');
     }
 
     _save();
@@ -692,7 +692,7 @@ class Core {
   Widget getArchiveView() {
     if (archive.isEmpty)
       return const Text(
-        'Archive is empty. 🕸️',
+        'Archive is empty.',
         style: TextStyle(
           color: cDim,
           fontFamily: 'JetBrains Mono',
@@ -995,7 +995,7 @@ class Core {
   ({bool error, String msg}) setAlias(List<String> args) {
     if (args.isEmpty) {
       if (aliases.isEmpty)
-        return (error: false, msg: 'No aliases currently set. 📭');
+        return (error: false, msg: 'No aliases currently set.');
       return (
         error: false,
         msg: aliases.entries.map((e) => '${e.key} = "${e.value}"').join('\n'),
@@ -1014,9 +1014,9 @@ class Core {
     if (commandStr.toLowerCase() == 'none') {
       if (aliases.remove(aliasName) != null) {
         _save();
-        return (error: false, msg: 'Alias "$aliasName" removed 🗑️');
+        return (error: false, msg: 'Alias "$aliasName" removed');
       }
-      return (error: true, msg: 'Alias "$aliasName" not found 🤷‍♂️');
+      return (error: true, msg: 'Alias "$aliasName" not found');
     }
 
     // Prevent overriding real commands to avoid chaotic loops 🛑
@@ -1064,12 +1064,12 @@ class Core {
     if (reserved.contains(aliasName) || aliasName.startsWith('-')) {
       return (
         error: true,
-        msg: 'Cannot overwrite core system command "$aliasName" 🚫',
+        msg: 'Cannot overwrite core system command "$aliasName"',
       );
     }
 
     aliases[aliasName] = commandStr;
     _save();
-    return (error: false, msg: 'Alias set! 🔗 $aliasName -> "$commandStr"');
+    return (error: false, msg: 'Alias set! $aliasName -> "$commandStr"');
   }
 }
