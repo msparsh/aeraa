@@ -11,13 +11,6 @@ class Core {
 
   Timer? _saveTimer;
 
-  static const cRed = Color(0xFFE06C75);
-  static const cPurple = Color(0xFFC678DD);
-  static const cGreen = Color(0xFF98C379);
-  static const cBlue = Color(0xFF61AFEF);
-  static const cYellow = Color(0xFFE5C07B);
-  static const cDim = Color(0xFF5C6370);
-
   Core() {}
 
   Future<void> init() async {
@@ -255,10 +248,9 @@ class Core {
 
         for (var aId in toArchive) {
           final item = items.remove(aId);
-          if (item != null) archive[aId] = item; 
+          if (item != null) archive[aId] = item;
         }
         toggled.add('$id (archived)');
-        
       } else if (archive.containsKey(id)) {
         // Archive -> Active (plus all subtasks!) 🗂️⬆️
         final toRestore = <int>{};
@@ -268,17 +260,19 @@ class Core {
               .where((it) => it.parentId == currentId)
               .forEach((c) => collectRestore(c.id));
         }
-        
+
         collectRestore(id);
-        
+
         for (var rId in toRestore) {
           final item = archive.remove(rId);
           if (item != null) {
-            items[rId] = item; 
-            
+            items[rId] = item;
+
             // If the explicitly requested item has a parent that is STILL in the archive,
             // we sever the tie so it becomes a root item on the active board. ✂️
-            if (rId == id && item.parentId != null && !items.containsKey(item.parentId)) {
+            if (rId == id &&
+                item.parentId != null &&
+                !items.containsKey(item.parentId)) {
               item.parentId = null;
             }
           }
@@ -291,9 +285,12 @@ class Core {
 
     if (toggled.isEmpty)
       return (error: true, msg: 'IDs not found: ${notFound.join(', ')} 🤷♂️');
-      
+
     _save();
-    return (error: false, msg: 'Toggled archive state: ${toggled.join(', ')} ✅');
+    return (
+      error: false,
+      msg: 'Toggled archive state: ${toggled.join(', ')} ✅',
+    );
   }
 
   ({bool error, String msg}) editItem(String idRaw, String newDesc) {
@@ -578,11 +575,16 @@ class Core {
           style: const TextStyle(
             color: Color(0xFFEEEEEE),
             fontWeight: FontWeight.w600,
+            decoration: TextDecoration.underline,
+            decorationColor: Color(0xFFEEEEEE), // Color of the underline
+            decorationStyle: TextDecorationStyle.solid,
+            // Style (solid, dashed, dotted, etc.)
+            decorationThickness: 2, // Thickness of the line
             letterSpacing: 0.5,
           ),
         ),
         TextSpan(
-          text: '  $doneCount/${tasks.length} done\n',
+          text: '  [$doneCount/${tasks.length}]\n',
           style: const TextStyle(color: cDim),
         ),
       ]);
@@ -599,7 +601,7 @@ class Core {
         style: const TextStyle(color: cGreen),
       ),
       const TextSpan(
-        text: ' done  ',
+        text: ' done · ',
         style: TextStyle(color: cDim),
       ),
       TextSpan(
@@ -607,7 +609,7 @@ class Core {
         style: const TextStyle(color: cBlue),
       ),
       const TextSpan(
-        text: ' started  ',
+        text: ' started · ',
         style: TextStyle(color: cDim),
       ),
       TextSpan(
@@ -615,7 +617,7 @@ class Core {
         style: const TextStyle(color: cPurple),
       ),
       const TextSpan(
-        text: ' pending  ',
+        text: ' pending · ',
         style: TextStyle(color: cDim),
       ),
       TextSpan(
@@ -686,17 +688,16 @@ class Core {
     ];
 
     // 👇 NEW: Only grab root tasks to prevent duplicating subtasks!
-    final rootArchivedItems = archive.values
-        .where((it) => it.parentId == null)
-        .toList()
-      ..sort((a, b) => a.id.compareTo(b.id));
+    final rootArchivedItems =
+        archive.values.where((it) => it.parentId == null).toList()
+          ..sort((a, b) => a.id.compareTo(b.id));
 
     for (var it in rootArchivedItems) {
       // 👇 NEW: Pass the isArchive flag to get that sweet formatting!
-      spans.addAll(_formatItemLine(it, isArchive: true)); 
+      spans.addAll(_formatItemLine(it, isArchive: true));
       spans.add(const TextSpan(text: '\n'));
     }
-    
+
     if (spans.isNotEmpty) spans.removeLast();
 
     return _buildRichText(spans);
@@ -711,9 +712,19 @@ class Core {
 
     // The definitive list of system flags
     final knownFlags = {
-      'star', 'starred', 'done', 'complete', 'checked', 
-      'progress', 'started', 'pending', 'unchecked', 
-      'task', 'tasks', 'note', 'notes'
+      'star',
+      'starred',
+      'done',
+      'complete',
+      'checked',
+      'progress',
+      'started',
+      'pending',
+      'unchecked',
+      'task',
+      'tasks',
+      'note',
+      'notes',
     };
 
     for (var arg in args) {
@@ -731,35 +742,41 @@ class Core {
       }
     }
 
-    return Map.fromEntries(items.entries.where((e) {
-      final v = e.value;
-      
-      // 1. Boards Check (OR logic)
-      if (boards.isNotEmpty && !v.boards.any(boards.contains)) return false;
-      
-      // 2. Required Tags Check (AND logic)
-      if (reqTags.isNotEmpty && !reqTags.every(v.tags.contains)) return false;
+    return Map.fromEntries(
+      items.entries.where((e) {
+        final v = e.value;
 
-      // 3. Excluded Tags Check (NOT logic)
-      if (exclTags.isNotEmpty && exclTags.any(v.tags.contains)) return false;
+        // 1. Boards Check (OR logic)
+        if (boards.isNotEmpty && !v.boards.any(boards.contains)) return false;
 
-      // 4. Keyword Search Check (AND logic for precision)
-      if (searchTerms.isNotEmpty) {
-        final desc = v.description.toLowerCase();
-        if (!searchTerms.every((term) => desc.contains(term))) return false;
-      }
+        // 2. Required Tags Check (AND logic)
+        if (reqTags.isNotEmpty && !reqTags.every(v.tags.contains)) return false;
 
-      // 5. State Flags Check
-      return flags.every((f) => switch (f) {
-        'star' || 'starred' => v.isStarred,
-        'done' || 'complete' || 'checked' => v.isTask && v.isComplete,
-        'progress' || 'started' => v.isTask && v.inProgress && !v.isComplete,
-        'pending' || 'unchecked' => v.isTask && !v.isComplete && !v.inProgress,
-        'task' || 'tasks' => v.isTask,
-        'note' || 'notes' => !v.isTask,
-        _ => true,
-      });
-    }));
+        // 3. Excluded Tags Check (NOT logic)
+        if (exclTags.isNotEmpty && exclTags.any(v.tags.contains)) return false;
+
+        // 4. Keyword Search Check (AND logic for precision)
+        if (searchTerms.isNotEmpty) {
+          final desc = v.description.toLowerCase();
+          if (!searchTerms.every((term) => desc.contains(term))) return false;
+        }
+
+        // 5. State Flags Check
+        return flags.every(
+          (f) => switch (f) {
+            'star' || 'starred' => v.isStarred,
+            'done' || 'complete' || 'checked' => v.isTask && v.isComplete,
+            'progress' ||
+            'started' => v.isTask && v.inProgress && !v.isComplete,
+            'pending' ||
+            'unchecked' => v.isTask && !v.isComplete && !v.inProgress,
+            'task' || 'tasks' => v.isTask,
+            'note' || 'notes' => !v.isTask,
+            _ => true,
+          },
+        );
+      }),
+    );
   }
 
   List<InlineSpan> _formatItemLine(
@@ -771,9 +788,9 @@ class Core {
   }) {
     final seen = visited ?? <int>{};
     seen.add(item.id);
-    
+
     // 👈 NEW: Point to the correct pool based on the view
-    final pool = isArchive ? archive : items; 
+    final pool = isArchive ? archive : items;
 
     String prefix = '•';
     Color pColor = cBlue;
@@ -859,10 +876,11 @@ class Core {
     }
 
     // 👇 UPDATED: Search the correct pool for children
-    final children = pool.values 
-        .where((c) => c.parentId == item.id && !seen.contains(c.id))
-        .toList()
-      ..sort((a, b) => a.id.compareTo(b.id));
+    final children =
+        pool.values
+            .where((c) => c.parentId == item.id && !seen.contains(c.id))
+            .toList()
+          ..sort((a, b) => a.id.compareTo(b.id));
 
     for (var child in children) {
       spans.add(const TextSpan(text: '\n'));
@@ -938,11 +956,18 @@ class Core {
 
   ({bool error, String msg}) setAlias(List<String> args) {
     if (args.isEmpty) {
-      if (aliases.isEmpty) return (error: false, msg: 'No aliases currently set. 📭');
-      return (error: false, msg: aliases.entries.map((e) => '${e.key} = "${e.value}"').join('\n'));
+      if (aliases.isEmpty)
+        return (error: false, msg: 'No aliases currently set. 📭');
+      return (
+        error: false,
+        msg: aliases.entries.map((e) => '${e.key} = "${e.value}"').join('\n'),
+      );
     }
     if (args.length < 2) {
-      return (error: true, msg: 'Usage: alias <name> <command> (or "alias <name> none" to remove)');
+      return (
+        error: true,
+        msg: 'Usage: alias <name> <command> (or "alias <name> none" to remove)',
+      );
     }
 
     final aliasName = args[0].toLowerCase();
@@ -958,27 +983,51 @@ class Core {
 
     // Prevent overriding real commands to avoid chaotic loops 🛑
     final reserved = {
-      'task', '-t', 'add',
-      'note', '-n',
-      'list', '-l', 'ls',
+      'task',
+      '-t',
+      'add',
+      'note',
+      '-n',
+      'list',
+      '-l',
+      'ls',
       'board',
-      'timeline', '-i',
-      'archive', '-a', 'restore', '-r',
-      'check', '-c',
-      'begin', '-b',
-      'star', '-s',
-      'delete', '-d',
+      'timeline',
+      '-i',
+      'archive',
+      '-a',
+      'restore',
+      '-r',
+      'check',
+      '-c',
+      'begin',
+      '-b',
+      'star',
+      '-s',
+      'delete',
+      '-d',
       'sweep',
-      'edit', '-e',
-      'move', 'mv', '-m', 'm',
-      'sub', 'subtask',
-      'priority', '-p',
+      'edit',
+      '-e',
+      'move',
+      'mv',
+      '-m',
+      'm',
+      'sub',
+      'subtask',
+      'priority',
+      '-p',
       'due',
-      'help', '-h', '--help',
-      'alias'
+      'help',
+      '-h',
+      '--help',
+      'alias',
     };
     if (reserved.contains(aliasName) || aliasName.startsWith('-')) {
-      return (error: true, msg: 'Cannot overwrite core system command "$aliasName" 🚫');
+      return (
+        error: true,
+        msg: 'Cannot overwrite core system command "$aliasName" 🚫',
+      );
     }
 
     aliases[aliasName] = commandStr;

@@ -9,11 +9,22 @@ part 'task_item.dart';
 part 'core.dart';
 
 // ─── Design tokens ────────────────────────────────────────────────────────────
-const _kBg = Color(0xFF0D0D0D);
-const _kSurface = Color(0xFF141414);
-const _kBorder = Color(0xFF1E1E1E);
-const _kPrompt = Color(0xFF00FF88);
-const _kCaret = Color(0xFF00FF88);
+
+// Core Colors
+const cRed = Color.fromRGBO(224, 108, 117, 1);
+const cPurple = Color(0xFFC678DD);
+const cGreen = Color(0xFF98C379);
+const cBlue = Color(0xFF61AFEF);
+const cYellow = Color(0xFFE5C07B);
+const cDim = Color(0xFF5C6370);
+const cVeryDim = Color.fromARGB(255, 27, 27, 27);
+const cBlack = Color.fromARGB(255, 0, 0, 0);
+
+const _kBg = cBlack;
+const _kSurface = cBlack;
+const _kBorder = cVeryDim;
+const _kPrompt = cGreen;
+
 const _kMono = [
   'JetBrains Mono',
   'Fira Code',
