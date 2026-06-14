@@ -7,8 +7,10 @@ environment:
   sdk: ^3.12.2
 
 dependencies:
+  window_manager: ^0.5.1
   flutter:
     sdk: flutter
+
 
 dev_dependencies:
   flutter_test:
@@ -20,7 +22,7 @@ flutter:
   uses-material-design: true
 
 msix_config:
-  display_name: Flutter Todo
+  display_name: Task Terminal
   publisher_display_name: Sparsh
   identity_name: com.sparsh.todo
   logo_path: windows/runner/resources/app_icon.ico
