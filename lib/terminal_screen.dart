@@ -293,7 +293,8 @@ help / -h / --help                                     : show this menu''';
         } else {
           final id = tailArgs[0];
           if (tailArgs.length == 1) {
-            final res = tb.getLocation(id);
+            // Move to inbox and unlink
+            final res = tb.moveBoards(id, ['inbox']);
             _addResponse(res.error ? 'Error: ${res.msg}' : res.msg);
           } else {
             final targetFlag = tailArgs[1];
