@@ -627,7 +627,7 @@ class Core {
       ),
       TextSpan(
         text: '${stats.inProgress}',
-        style: const TextStyle(color: cBlue),
+        style: const TextStyle(color: cYellow),
       ),
       const TextSpan(
         text: ' started · ',
@@ -822,8 +822,8 @@ class Core {
         pColor = cGreen;
         dStyle = const TextStyle(color: cDim);
       } else if (item.inProgress) {
-        prefix = '•';
-        pColor = cBlue;
+        prefix = '≡';
+        pColor = cYellow;
       } else {
         prefix = '☐';
         pColor = cPurple;

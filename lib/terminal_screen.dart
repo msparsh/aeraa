@@ -24,27 +24,42 @@ class _TerminalScreenState extends State<TerminalScreen> {
   bool _isNavigating = false;
   static const int maxHistory = 100;
 
-  static const _helpMenu =
-      '''task / -t / add description @board p:2                 : create task
-note / -n description @board                           : create note
-sub / subtask id description                           : create subtask under parent
-list / ls / -l [@board] [#tag] [flags] [keywords]      : search and super-filter items
-board                                                  : dashboard view
-timeline / -i                                          : timeline by creation date
-archive / -a [id1 id2 ...]                             : view archive OR toggle archive state
-check / -c [id1 id2 ...]                               : toggle complete
-begin / -b [id1 id2 ...]                               : start/pause task
-star / -s [id1 id2 ...]                                : toggle starred
-delete / -d / restore / -r [id1 id2 ...]               : toggle archive state (alias)
-sweep                                                  : remove all completed tasks
-edit / -e id new description                           : change description
-move / mv / -m id parent_id                            : nest under another task
-move / mv / -m id @board1 @board2 ...                  : move to board(s) (unlinks)
-tag id #tag1 [#tag2 ...]                               : toggle tag(s) on item
-priority / -p id [1|2|3]                               : cycle priority OR set to 1/2/3
-due id DD-MM-YYYY | none                               : set or remove due date
-alias name command                                     : create or remove a custom alias
-help / -h / --help                                     : show this menu''';
+  static const _helpMenu = '''
+COMMAND REFERENCE
+
+CREATE
+  task, -t, add <desc>      : Create a task (Options: @board #tag due:DD-MM-YYYY p:1-3)
+  note, -n <desc>           : Create a note (Options: @board #tag)
+  sub, subtask <id> <desc>  : Create a subtask under a specific parent ID
+
+VIEW & FILTER
+  board                     : Show the default board view
+  timeline, -i              : Show tasks grouped by creation date
+  list, -l, ls [filters]    : Search and filter items. 
+                              Filters: @board, #tag, -#tag (exclude), star, done, pending, progress, task, note
+  archive, -a               : View the archive (if no IDs are provided)
+
+UPDATE STATE
+  check, -c <id...>         : Toggle complete/pending status
+  begin, -b <id...>         : Toggle in-progress/paused status
+  star, -s <id...>          : Toggle starred status
+  priority, -p <id> [1-3]   : Set priority level (omitting the level cycles it)
+  due <id> [DD-MM-YYYY]     : Set due date (use "none" to remove)
+
+MODIFY & ORGANIZE
+  edit, -e <id> <desc>      : Edit an item's description
+  tag <id> #tag1...         : Toggle specific tags on an item
+  move, mv, -m <id> <dest>  : Nest under a parent ID, or unnest to @boards
+  delete, -d <id...>        : Send items to the archive
+  restore, -r <id...>       : Restore items from the archive
+  sweep                     : Clear and archive all completed tasks
+
+SYSTEM
+  alias <name> <cmd>        : Create a shortcut (e.g., alias hw list @homework)
+  alias <name> none         : Remove a specific alias
+  alias                     : List all active aliases
+  help, -h, --help          : Show this menu
+''';
 
   @override
   void initState() {
@@ -112,7 +127,7 @@ help / -h / --help                                     : show this menu''';
   void _displayList(List<String> filterArgs) {
     final filtered = tb.filterItems(filterArgs);
     if (filtered.isEmpty) {
-      _addResponse('No items match your criteria. 📭');
+      _addResponse('No items match your criteria.');
       return;
     }
 
@@ -154,16 +169,13 @@ help / -h / --help                                     : show this menu''';
   }) {
     if (args.isEmpty) {
       if (viewFlag != null) {
-        // e.g., 'star' with no args -> show all starred items 🌟
         _displayList([viewFlag]);
       } else if (usageMsg != null) {
-        // e.g., 'move' with no args -> show usage error ❌
         _addResponse(usageMsg);
       } else {
-        _addResponse('Error: Missing arguments. ⚠️');
+        _addResponse('Error: Missing arguments.');
       }
     } else {
-      // Execute the actual core function! ⚡
       final res = action(args);
       _addResponse(res.error ? 'Error: ${res.msg}' : res.msg);
     }
@@ -217,7 +229,7 @@ help / -h / --help                                     : show this menu''';
     if (tb.aliases.containsKey(mainCmd)) {
       final activeVisited = visited ?? <String>{};
       if (activeVisited.contains(mainCmd)) {
-        _addResponse('Error: Circular alias loop detected for "$mainCmd" 🔄');
+        _addResponse('Error: Circular alias loop detected for "$mainCmd"');
         return;
       }
       activeVisited.add(mainCmd);
@@ -250,7 +262,6 @@ help / -h / --help                                     : show this menu''';
       case 'list' || '-l' || 'ls':
         _displayList(tailArgs);
 
-      // 💡 Improved: Guard clause prevents nested if/else!
       case 'tag' when tailArgs.length < 2:
         _addResponse('Usage: tag id #tag1 [#tag2 ...]');
       case 'tag':
@@ -274,14 +285,12 @@ help / -h / --help                                     : show this menu''';
         final res = tb.clearCompleted();
         _addResponse(res.msg);
 
-      // 💡 Improved: Flattened edit logic!
       case 'edit' || '-e' when tailArgs.length < 2:
         _addResponse('Usage: edit id new description');
       case 'edit' || '-e':
         final res = tb.editItem(tailArgs[0], tailArgs.sublist(1).join(' '));
         _addResponse(res.error ? 'Error: ${res.msg}' : res.msg);
 
-      // 💡 Improved: Complex 'move' command is now beautifully separated!
       case 'move' || 'mv' || '-m' || 'm' when tailArgs.isEmpty:
         _addResponse(
           'Usage: mv id parent_id OR mv id @board1 @board2 (unlinks)',
