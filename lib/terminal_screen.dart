@@ -246,27 +246,22 @@ help / -h / --help                                     : show this menu''';
         _addResponse(res.error ? 'Error: ${res.msg}' : res.msg);
 
       case 'list' || '-l' || 'ls':
-        // Just route directly to our new display method 📜
         _displayList(tailArgs);
 
+      // 💡 Improved: Guard clause prevents nested if/else!
+      case 'tag' when tailArgs.length < 2:
+        _addResponse('Usage: tag id #tag1 [#tag2 ...]');
       case 'tag':
-        if (tailArgs.length < 2) {
-          _addResponse('Usage: tag id #tag1 [#tag2 ...]');
-        } else {
-          final res = tb.toggleTag(tailArgs[0], tailArgs.sublist(1));
-          _addResponse(res.error ? 'Error: ${res.msg}' : res.msg);
-        }
+        final res = tb.toggleTag(tailArgs[0], tailArgs.sublist(1));
+        _addResponse(res.error ? 'Error: ${res.msg}' : res.msg);
 
       case 'check' || '-c':
-        // BONUS: You can reuse it for 'check' immediately! ✅
         _executeOrView(tailArgs, action: tb.checkTasks, viewFlag: 'done');
 
       case 'begin' || '-b':
-        // BONUS: Reused for 'begin' too! 🚀
         _executeOrView(tailArgs, action: tb.beginTasks, viewFlag: 'progress');
 
       case 'star' || '-s':
-        // MAGIC: Reuses the dispatcher! ✨
         _executeOrView(tailArgs, action: tb.starItems, viewFlag: 'star');
 
       case 'delete' || '-d':
@@ -277,77 +272,61 @@ help / -h / --help                                     : show this menu''';
         final res = tb.clearCompleted();
         _addResponse(res.msg);
 
+      // 💡 Improved: Flattened edit logic!
+      case 'edit' || '-e' when tailArgs.length < 2:
+        _addResponse('Usage: edit id new description');
       case 'edit' || '-e':
-        if (tailArgs.length < 2) {
-          _addResponse('Usage: edit id new description');
-        } else {
-          final res = tb.editItem(tailArgs[0], tailArgs.sublist(1).join(' '));
-          _addResponse(res.error ? 'Error: ${res.msg}' : res.msg);
-        }
+        final res = tb.editItem(tailArgs[0], tailArgs.sublist(1).join(' '));
+        _addResponse(res.error ? 'Error: ${res.msg}' : res.msg);
 
+      // 💡 Improved: Complex 'move' command is now beautifully separated!
+      case 'move' || 'mv' || '-m' || 'm' when tailArgs.isEmpty:
+        _addResponse(
+          'Usage: mv id parent_id OR mv id @board1 @board2 (unlinks)',
+        );
+      case 'move' || 'mv' || '-m' || 'm' when tailArgs.length == 1:
+        final res = tb.moveBoards(tailArgs[0], ['inbox']);
+        _addResponse(res.error ? 'Error: ${res.msg}' : res.msg);
       case 'move' || 'mv' || '-m' || 'm':
-        if (tailArgs.isEmpty) {
-          _addResponse(
-            'Usage: mv id parent_id OR mv id @board1 @board2 (unlinks)',
-          );
+        final id = tailArgs[0];
+        final targetFlag = tailArgs[1];
+        if (RegExp(r'^\d+$').hasMatch(targetFlag)) {
+          final res = tb.reparentTask(id, targetFlag);
+          _addResponse(res.error ? 'Error: ${res.msg}' : res.msg);
         } else {
-          final id = tailArgs[0];
-          if (tailArgs.length == 1) {
-            // Move to inbox and unlink
-            final res = tb.moveBoards(id, ['inbox']);
-            _addResponse(res.error ? 'Error: ${res.msg}' : res.msg);
-          } else {
-            final targetFlag = tailArgs[1];
-            // Since parents are now raw numbers, we just check if it's strictly digits!
-            final isParentId = RegExp(r'^\d+$').hasMatch(targetFlag);
-            if (isParentId) {
-              final res = tb.reparentTask(id, targetFlag);
-              _addResponse(res.error ? 'Error: ${res.msg}' : res.msg);
-            } else {
-              final res = tb.moveBoards(id, tailArgs.sublist(1));
-              _addResponse(res.error ? 'Error: ${res.msg}' : res.msg);
-            }
-          }
+          final res = tb.moveBoards(id, tailArgs.sublist(1));
+          _addResponse(res.error ? 'Error: ${res.msg}' : res.msg);
         }
 
+      case 'sub' || 'subtask' when tailArgs.length < 2:
+        _addResponse('Usage: sub id [options] description');
       case 'sub' || 'subtask':
-        if (tailArgs.length < 2) {
-          _addResponse('Usage: sub id [options] description');
-        } else {
-          final res = tb.createSubtask(tailArgs[0], tailArgs.sublist(1));
-          _addResponse(res.error ? 'Error: ${res.msg}' : res.msg);
-        }
+        final res = tb.createSubtask(tailArgs[0], tailArgs.sublist(1));
+        _addResponse(res.error ? 'Error: ${res.msg}' : res.msg);
 
+      case 'priority' || '-p' when tailArgs.isEmpty:
+        _addResponse('Usage: priority id [1|2|3]');
       case 'priority' || '-p':
-        if (tailArgs.isEmpty) {
-          _addResponse('Usage: priority id [1|2|3]');
-        } else {
-          final res = tb.updatePriority(
-            tailArgs[0],
-            tailArgs.length > 1 ? tailArgs[1] : null,
-          );
-          _addResponse(res.error ? 'Error: ${res.msg}' : res.msg);
-        }
+        final res = tb.updatePriority(
+          tailArgs[0],
+          tailArgs.length > 1 ? tailArgs[1] : null,
+        );
+        _addResponse(res.error ? 'Error: ${res.msg}' : res.msg);
 
+      case 'due' when tailArgs.length < 2:
+        _addResponse('Usage: due id DD-MM-YYYY (or "none" to remove)');
       case 'due':
-        if (tailArgs.length < 2) {
-          _addResponse('Usage: due id DD-MM-YYYY (or "none" to remove)');
-        } else {
-          final res = tb.updateDue(tailArgs[0], tailArgs[1]);
-          _addResponse(res.error ? 'Error: ${res.msg}' : res.msg);
-        }
+        final res = tb.updateDue(tailArgs[0], tailArgs[1]);
+        _addResponse(res.error ? 'Error: ${res.msg}' : res.msg);
 
-      case 'archive' || '-a' || 'delete' || '-d' || 'restore' || '-r':
-        if (tailArgs.isEmpty) {
-          if (mainCmd == 'archive' || mainCmd == '-a') {
-            _addNode(widget: tb.getArchiveView());
-          } else {
-            _addResponse('Usage: $mainCmd id1 [id2 ...]');
-          }
-        } else {
-          final res = tb.toggleArchive(tailArgs);
-          _addResponse(res.error ? 'Error: ${res.msg}' : res.msg);
-        }
+      // 💡 Improved: Distinct logic paths for 'archive' vs 'restore' empty states!
+      case 'archive' || '-a' when tailArgs.isEmpty:
+        _addNode(widget: tb.getArchiveView());
+      case 'restore' || '-r' when tailArgs.isEmpty:
+        _addResponse('Usage: restore id1 [id2 ...]');
+      case 'archive' || '-a' || 'restore' || '-r':
+        final res = tb.toggleArchive(tailArgs);
+        _addResponse(res.error ? 'Error: ${res.msg}' : res.msg);
 
       case 'timeline' || '-i':
         _addNode(widget: tb.getTimelineView());

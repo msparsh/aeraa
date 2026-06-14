@@ -21,8 +21,13 @@ class Core {
       if (data['aliases'] != null) {
         aliases = Map<String, String>.from(data['aliases'] as Map);
       }
+      // 👇 Trust the saved ID, or fallback to the manual calculation if it's an older save file
+      if (data['nextId'] != null) {
+        _nextId = data['nextId'] as int;
+      } else {
+        _refreshNextId(); 
+      }
     }
-    _refreshNextId();
   }
 
   Map<int, TaskItem> _decodeMap(dynamic raw) {
@@ -46,24 +51,23 @@ class Core {
     _nextId = (mItems > mArch ? mItems : mArch) + 1;
   }
 
+  Map<String, dynamic> _buildSavePayload() => {
+    'items': items.map((k, v) => MapEntry(k.toString(), v.toJson())),
+    'archive': archive.map((k, v) => MapEntry(k.toString(), v.toJson())),
+    'aliases': aliases,
+    'nextId': _nextId, // 👈 Save the exact next ID
+  };
+
   void _save() {
     _saveTimer?.cancel();
     _saveTimer = Timer(const Duration(milliseconds: 500), () {
-      _storage.saveData({
-        'items': items.map((k, v) => MapEntry(k.toString(), v.toJson())),
-        'archive': archive.map((k, v) => MapEntry(k.toString(), v.toJson())),
-        'aliases': aliases,
-      });
+      _storage.saveData(_buildSavePayload());
     });
   }
 
   void forceSaveImmediate() {
     _saveTimer?.cancel();
-    _storage.saveData({
-      'items': items.map((k, v) => MapEntry(k.toString(), v.toJson())),
-      'archive': archive.map((k, v) => MapEntry(k.toString(), v.toJson())),
-      'aliases': aliases,
-    });
+    _storage.saveData(_buildSavePayload());
   }
 
   int _generateId() => _nextId++;
