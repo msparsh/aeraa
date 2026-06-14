@@ -43,9 +43,18 @@ const _kLineH = 1.6;
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await windowManager.ensureInitialized();
-  windowManager.waitUntilReadyToShow().then((_) async {
-    await windowManager.setTitleBarStyle(TitleBarStyle.hidden);
+
+  // Define your initial window size, position, and style
+  WindowOptions windowOptions = const WindowOptions(
+    size: Size(1000, 700),
+    minimumSize: Size(300, 300),
+    center: true,
+    titleBarStyle: TitleBarStyle.hidden,
+  );
+
+  windowManager.waitUntilReadyToShow(windowOptions, () async {
     await windowManager.show();
+    await windowManager.focus(); // Brings the window to the front on launch
   });
   runApp(const TaskbookApp());
 }
