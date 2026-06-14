@@ -406,7 +406,6 @@ SYSTEM
     _cmdController.clear();
     _handleCommand(text);
     _focusNode.requestFocus();
-    _scrollToBottom();
   }
 
   @override
@@ -438,7 +437,10 @@ SYSTEM
                           final node = _outputHistory[index];
                           if (node.command != null) {
                             return Padding(
-                              padding: const EdgeInsets.only(top: 14, bottom: 2),
+                              padding: const EdgeInsets.only(
+                                top: 14,
+                                bottom: 2,
+                              ),
                               child: node.widget,
                             );
                           }
