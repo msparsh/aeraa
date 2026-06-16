@@ -14,6 +14,7 @@ class TerminalScreen extends StatefulWidget {
 
 class _TerminalScreenState extends State<TerminalScreen> {
   final Core tb = Core();
+  late final Renderer tp = Renderer(tb);
   final TextEditingController _cmdController = TextEditingController();
   final FocusNode _focusNode = FocusNode();
   final ScrollController _scrollController = ScrollController();
@@ -22,7 +23,6 @@ class _TerminalScreenState extends State<TerminalScreen> {
   final List<String> _cmdHistory = [];
   int _historyPos = 0;
   bool _isNavigating = false;
-  static const int maxHistory = 100;
 
   static const _helpMenu = '''
 COMMAND REFERENCE
@@ -54,12 +54,13 @@ MODIFY & ORGANIZE
   restore, -r <id...>       : Restore items from the archive
   sweep                     : Clear and archive all completed tasks
 
-SYSTEM
-  alias <name> <cmd>        : Create a shortcut (e.g., alias hw list @homework)
-  alias <name> none         : Remove a specific alias
-  alias                     : List all active aliases
-  help, -h, --help          : Show this menu
-''';
+  SYSTEM
+    alias <name> <cmd>        : Create a shortcut (e.g., alias hw list @homework)
+    alias <name> none         : Remove a specific alias
+    alias                     : List all active aliases
+    manage                    : View and modify configuration settings
+    help, -h, --help          : Show this menu
+  ''';
 
   @override
   void initState() {
@@ -69,7 +70,15 @@ SYSTEM
 
   Future<void> _initializeTaskbook() async {
     await tb.init();
+    try {
+      await windowManager.setOpacity(tb.opacity);
+    } catch (_) {}
     if (mounted) {
+      setState(() {
+        _cmdHistory.clear();
+        _cmdHistory.addAll(tb.history);
+        _historyPos = _cmdHistory.length;
+      });
       _handleCommand('');
     }
   }
@@ -98,7 +107,14 @@ SYSTEM
     if (cmd.trim().isEmpty) return;
     if (_cmdHistory.isNotEmpty && _cmdHistory.last == cmd) return;
     _cmdHistory.add(cmd);
-    if (_cmdHistory.length > maxHistory) _cmdHistory.removeAt(0);
+    _trimHistory();
+    tb.saveHistory(_cmdHistory);
+  }
+
+  void _trimHistory() {
+    while (_cmdHistory.length > tb.historyLimit) {
+      _cmdHistory.removeAt(0);
+    }
   }
 
   /// Universal method to add terminal output nodes (command or widget)
@@ -116,7 +132,7 @@ SYSTEM
           color: isError ? const Color(0xFFE06C75) : const Color(0xFFCCCCCC),
           fontFamily: 'JetBrains Mono',
           fontFamilyFallback: _kMono,
-          fontSize: _kFontSize,
+          fontSize: tb.fontSize,
           height: _kLineH,
         ),
       ),
@@ -138,7 +154,7 @@ SYSTEM
 
     final spans = <InlineSpan>[];
     for (var it in rootItems) {
-      spans.addAll(tb._formatItemLine(it));
+      spans.addAll(tp.formatItemLine(it));
       spans.add(const TextSpan(text: '\n'));
     }
     if (spans.isNotEmpty) spans.removeLast();
@@ -146,12 +162,12 @@ SYSTEM
     _addNode(
       widget: RichText(
         text: TextSpan(
-          style: const TextStyle(
+          style: TextStyle(
             fontFamily: 'JetBrains Mono',
             fontFamilyFallback: _kMono,
-            fontSize: _kFontSize,
+            fontSize: tb.fontSize,
             height: _kLineH,
-            color: Color(0xFFCCCCCC),
+            color: const Color(0xFFCCCCCC),
           ),
           children: spans,
         ),
@@ -181,10 +197,14 @@ SYSTEM
     }
   }
 
-  void _handleCommand(String raw, [Set<String>? visited]) {
+  void _handleCommand(String raw, [Set<String>? visited]) async {
     final trimmed = raw.trim();
     if (trimmed.isEmpty) {
-      _addNode(widget: tb.getBoardView());
+      if (tb.defaultView == 'timeline') {
+        _addNode(widget: tp.getTimelineView());
+      } else {
+        _addNode(widget: tp.getBoardView());
+      }
       return;
     }
 
@@ -200,23 +220,23 @@ SYSTEM
       widget: RichText(
         text: TextSpan(
           children: [
-            const TextSpan(
+            TextSpan(
               text: '\$ ',
               style: TextStyle(
-                color: Color.fromARGB(255, 255, 255, 255),
+                color: const Color.fromARGB(255, 255, 255, 255),
                 fontFamily: 'JetBrains Mono',
                 fontFamilyFallback: _kMono,
-                fontSize: _kFontSize,
+                fontSize: tb.fontSize,
                 fontWeight: FontWeight.w600,
               ),
             ),
             TextSpan(
               text: trimmed,
-              style: const TextStyle(
-                color: Color(0xFFEEEEEE),
+              style: TextStyle(
+                color: const Color(0xFFEEEEEE),
                 fontFamily: 'JetBrains Mono',
                 fontFamilyFallback: _kMono,
-                fontSize: _kFontSize,
+                fontSize: tb.fontSize,
               ),
             ),
           ],
@@ -249,7 +269,7 @@ SYSTEM
         _addResponse(_helpMenu);
 
       case 'board':
-        _addNode(widget: tb.getBoardView());
+        _addNode(widget: tp.getBoardView());
 
       case 'task' || '-t' || 'add':
         final res = tb.createTask(tailArgs);
@@ -337,7 +357,7 @@ SYSTEM
         _addResponse(res.error ? 'Error: ${res.msg}' : res.msg);
 
       case 'archive' || '-a' when tailArgs.isEmpty:
-        _addNode(widget: tb.getArchiveView());
+        _addNode(widget: tp.getArchiveView());
       case 'restore' || '-r' when tailArgs.isEmpty:
         _addResponse('Usage: restore id1 [id2 ...]');
       case 'archive' || '-a' || 'restore' || '-r':
@@ -345,10 +365,22 @@ SYSTEM
         _addResponse(res.error ? 'Error: ${res.msg}' : res.msg);
 
       case 'timeline' || '-i':
-        _addNode(widget: tb.getTimelineView());
+        _addNode(widget: tp.getTimelineView());
 
       case 'alias':
         final res = tb.setAlias(tailArgs);
+        _addResponse(res.error ? 'Error: ${res.msg}' : res.msg);
+
+      case 'manage':
+        final res = tb.manageSettings(tailArgs);
+        if (!res.error) {
+          try {
+            await windowManager.setOpacity(tb.opacity);
+          } catch (_) {}
+          _trimHistory();
+          tb.saveHistory(_cmdHistory);
+          setState(() {});
+        }
         _addResponse(res.error ? 'Error: ${res.msg}' : res.msg);
 
       default:
@@ -467,6 +499,7 @@ SYSTEM
                     },
                     onSubmitted: _submitCommand,
                     onKeyEvent: _handleKeyEvent,
+                    fontSize: tb.fontSize,
                   ),
                 ],
               ),
@@ -499,6 +532,8 @@ class _InputBar extends StatelessWidget {
   final ValueChanged<String> onSubmitted;
   final KeyEventResult Function(FocusNode, KeyEvent) onKeyEvent;
 
+  final double fontSize;
+
   const _InputBar({
     required this.cmdController,
     required this.focusNode,
@@ -506,6 +541,7 @@ class _InputBar extends StatelessWidget {
     required this.onChanged,
     required this.onSubmitted,
     required this.onKeyEvent,
+    required this.fontSize,
   });
 
   @override
@@ -520,14 +556,15 @@ class _InputBar extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.center,
         children: [
           // Prompt symbol
-          const Text(
+          Text(
             '\$',
             style: TextStyle(
               color: _kPrompt,
               fontFamily: 'JetBrains Mono',
               fontFamilyFallback: _kMono,
-              fontSize: _kFontSize + 1,
+              fontSize: fontSize + 1,
               fontWeight: FontWeight.w600,
+              decoration: TextDecoration.none,
             ),
           ),
           const SizedBox(width: 10),
@@ -539,11 +576,11 @@ class _InputBar extends StatelessWidget {
                 focusNode: focusNode,
                 autofocus: true,
                 cursorWidth: 2,
-                style: const TextStyle(
-                  color: Color(0xFFEEEEEE),
+                style: TextStyle(
+                  color: const Color(0xFFEEEEEE),
                   fontFamily: 'JetBrains Mono',
                   fontFamilyFallback: _kMono,
-                  fontSize: _kFontSize,
+                  fontSize: fontSize,
                   height: 1.4,
                 ),
                 decoration: const InputDecoration(

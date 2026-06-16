@@ -11,6 +11,12 @@ class Core {
 
   Timer? _saveTimer;
 
+  double fontSize = 13.5;
+  double opacity = 1.0;
+  String defaultView = 'board';
+  int historyLimit = 100;
+  List<String> history = [];
+
   Core() {}
 
   Future<void> init() async {
@@ -27,7 +33,25 @@ class Core {
       } else {
         _refreshNextId();
       }
+      if (data['settings'] != null) {
+        final s = data['settings'] as Map;
+        fontSize = (s['font_size'] as num?)?.toDouble() ?? 13.5;
+        opacity = (s['opacity'] as num?)?.toDouble() ?? 1.0;
+        defaultView = s['default'] as String? ?? 'board';
+        historyLimit = s['history_limit'] as int? ?? 100;
+      }
+      if (data['history'] != null) {
+        history = List<String>.from(data['history'] as List);
+      }
     }
+  }
+
+  void resetSettings() {
+    fontSize = 13.5;
+    opacity = 1.0;
+    defaultView = 'board';
+    historyLimit = 100;
+    _save();
   }
 
   Map<int, TaskItem> _decodeMap(dynamic raw) {
@@ -56,6 +80,13 @@ class Core {
     'archive': archive.map((k, v) => MapEntry(k.toString(), v.toJson())),
     'aliases': aliases,
     'nextId': _nextId, // 👈 Save the exact next ID
+    'settings': {
+      'font_size': fontSize,
+      'opacity': opacity,
+      'default': defaultView,
+      'history_limit': historyLimit,
+    },
+    'history': history,
   };
 
   void _save() {
@@ -68,6 +99,11 @@ class Core {
   void forceSaveImmediate() {
     _saveTimer?.cancel();
     _storage.saveData(_buildSavePayload());
+  }
+
+  void saveHistory(List<String> newHistory) {
+    history = List<String>.from(newHistory);
+    _save();
   }
 
   int _generateId() => _nextId++;
@@ -511,222 +547,6 @@ class Core {
     );
   }
 
-  // --- VIEW GENERATORS ---
-
-  Widget _buildRichText(
-    List<InlineSpan> mainSpans, {
-    List<InlineSpan>? footerSpans,
-  }) {
-    final textWidget = RichText(
-      text: TextSpan(
-        style: const TextStyle(
-          fontFamily: 'JetBrains Mono',
-          fontFamilyFallback: _kMono,
-          fontSize: _kFontSize,
-          height: _kLineH,
-          color: Color(0xFFCCCCCC),
-        ),
-        children: mainSpans,
-      ),
-    );
-
-    if (footerSpans == null) return textWidget;
-
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        textWidget,
-        const SizedBox(height: 12),
-        RichText(
-          text: TextSpan(
-            style: const TextStyle(
-              fontFamily: 'JetBrains Mono',
-              fontFamilyFallback: _kMono,
-              fontSize: _kFontSize - 1,
-              height: 1.4,
-              color: cDim,
-            ),
-            children: footerSpans,
-          ),
-        ),
-        const SizedBox(height: 10),
-      ],
-    );
-  }
-
-  bool _isOverdue(String dueStr) {
-    try {
-      final parts = dueStr.split('-');
-      final dueTime = DateTime(
-        int.parse(parts[2]),
-        int.parse(parts[1]),
-        int.parse(parts[0]),
-        23,
-        59,
-        59,
-      );
-      return DateTime.now().isAfter(dueTime);
-    } catch (_) {
-      return false;
-    }
-  }
-
-  Widget getBoardView() {
-    final groups = _groupByBoard();
-    final stats = _computeStats();
-    final spans = <InlineSpan>[];
-
-    bool isFirst = true;
-    for (var board in groups.keys) {
-      final itemsList = groups[board]!;
-      if (itemsList.isEmpty) continue;
-
-      final tasks = itemsList.where((i) => i.isTask);
-      final doneCount = tasks.where((i) => i.isComplete).length;
-      final boardName = board == 'inbox' ? '@inbox' : board;
-
-      if (!isFirst) {
-        spans.add(const TextSpan(text: '\n'));
-      }
-      isFirst = false;
-
-      spans.addAll([
-        TextSpan(
-          text: boardName,
-          style: const TextStyle(
-            color: Color(0xFFEEEEEE),
-            fontWeight: FontWeight.w600,
-            decoration: TextDecoration.underline,
-            decorationColor: Color(0xFFEEEEEE), // Color of the underline
-            decorationStyle: TextDecorationStyle.solid,
-            // Style (solid, dashed, dotted, etc.)
-            decorationThickness: 2, // Thickness of the line
-            letterSpacing: 0.5,
-          ),
-        ),
-        TextSpan(
-          text: '  [$doneCount/${tasks.length}]\n',
-          style: const TextStyle(color: cDim),
-        ),
-      ]);
-
-      for (var it in itemsList) {
-        spans.addAll(_formatItemLine(it));
-        spans.add(const TextSpan(text: '\n'));
-      }
-    }
-
-    final footerSpans = <InlineSpan>[
-      // 👇 NEW: The missing percentage line!
-      TextSpan(
-        text: '${stats.percent}% of all tasks complete.\n',
-        style: const TextStyle(color: cDim),
-      ),
-      TextSpan(
-        text: '${stats.complete}',
-        style: const TextStyle(color: cGreen),
-      ),
-      const TextSpan(
-        text: ' done · ',
-        style: TextStyle(color: cDim),
-      ),
-      TextSpan(
-        text: '${stats.inProgress}',
-        style: const TextStyle(color: cYellow),
-      ),
-      const TextSpan(
-        text: ' started · ',
-        style: TextStyle(color: cDim),
-      ),
-      TextSpan(
-        text: '${stats.pending}',
-        style: const TextStyle(color: cPurple),
-      ),
-      const TextSpan(
-        text: ' pending · ',
-        style: TextStyle(color: cDim),
-      ),
-      TextSpan(
-        text: '${stats.notes}',
-        style: const TextStyle(color: cBlue),
-      ),
-      const TextSpan(
-        text: ' notes',
-        style: TextStyle(color: cDim),
-      ),
-    ];
-    return _buildRichText(spans, footerSpans: footerSpans);
-  }
-
-  Widget getTimelineView() {
-    final groups = _groupByDate();
-    final spans = <InlineSpan>[
-      const TextSpan(
-        text: 'TIMELINE\n',
-        style: TextStyle(
-          color: Color(0xFFEEEEEE),
-          fontWeight: FontWeight.w600,
-          letterSpacing: 1.5,
-        ),
-      ),
-    ];
-
-    final sortedDates = groups.keys.toList()..sort();
-    for (var date in sortedDates) {
-      spans.add(
-        TextSpan(
-          text: '\n$date\n',
-          style: const TextStyle(color: cDim, letterSpacing: 0.5),
-        ),
-      );
-      for (var it in groups[date]!) {
-        spans.addAll(_formatItemLine(it));
-        spans.add(const TextSpan(text: '\n'));
-      }
-    }
-    if (spans.isNotEmpty) spans.removeLast();
-
-    return _buildRichText(spans);
-  }
-
-  Widget getArchiveView() {
-    if (archive.isEmpty)
-      return const Text(
-        'Archive is empty.',
-        style: TextStyle(
-          color: cDim,
-          fontFamily: 'JetBrains Mono',
-          fontFamilyFallback: _kMono,
-          fontSize: _kFontSize,
-        ),
-      );
-
-    final spans = <InlineSpan>[
-      const TextSpan(
-        text: 'ARCHIVED ITEMS\n',
-        style: TextStyle(
-          color: Color(0xFFEEEEEE),
-          fontWeight: FontWeight.w600,
-          letterSpacing: 1.5,
-        ),
-      ),
-    ];
-
-    // 👇 NEW: Only grab root tasks to prevent duplicating subtasks!
-    final rootArchivedItems =
-        archive.values.where((it) => it.parentId == null).toList()
-          ..sort((a, b) => a.id.compareTo(b.id));
-
-    for (var it in rootArchivedItems) {
-      // 👇 NEW: Pass the isArchive flag to get that sweet formatting!
-      spans.addAll(_formatItemLine(it, isArchive: true));
-      spans.add(const TextSpan(text: '\n'));
-    }
-
-    if (spans.isNotEmpty) spans.removeLast();
-
-    return _buildRichText(spans);
-  }
 
   Map<int, TaskItem> filterItems(List<String> args) {
     final boards = <String>{};
@@ -804,193 +624,6 @@ class Core {
     );
   }
 
-  List<InlineSpan> _formatItemLine(
-    TaskItem item, {
-    int indent = 0,
-    List<String>? parentBoards,
-    Set<int>? visited,
-    bool isArchive = false, // 👈 NEW: Tell it where to look for children!
-  }) {
-    final seen = visited ?? <int>{};
-    seen.add(item.id);
-
-    // 👈 NEW: Point to the correct pool based on the view
-    final pool = isArchive ? archive : items;
-
-    String prefix = '•';
-    Color pColor = cBlue;
-    TextStyle dStyle = const TextStyle(color: Color(0xFFDADADA));
-
-    if (item.isTask) {
-      if (item.isComplete) {
-        prefix = '✓';
-        pColor = cGreen;
-        dStyle = const TextStyle(color: cDim);
-      } else if (item.inProgress) {
-        prefix = '≡';
-        pColor = cYellow;
-      } else {
-        prefix = '☐';
-        pColor = cPurple;
-      }
-
-      if (!item.isComplete && item.priority == 3) {
-        dStyle = const TextStyle(
-          color: cYellow,
-          decoration: TextDecoration.underline,
-        );
-      }
-    } else {
-      dStyle = const TextStyle(color: cDim);
-    }
-
-    final spacing = ' ' * (indent == 0 ? 2 : indent);
-    final spans = <InlineSpan>[
-      TextSpan(text: spacing),
-      TextSpan(
-        text: '${item.id}.',
-        style: const TextStyle(color: cDim),
-      ),
-      TextSpan(
-        text: ' $prefix ',
-        style: TextStyle(color: pColor),
-      ),
-      TextSpan(text: item.description, style: dStyle),
-    ];
-
-    if (item.isTask && !item.isComplete) {
-      if (item.priority >= 2)
-        spans.add(
-          const TextSpan(
-            text: ' (!)',
-            style: TextStyle(color: cYellow),
-          ),
-        );
-
-      if (item.dueDate != null) {
-        final now = DateTime.now();
-        final todayStr =
-            '${now.day.toString().padLeft(2, '0')}-${now.month.toString().padLeft(2, '0')}-${now.year}';
-
-        Color dueColor = cDim;
-        if (_isOverdue(item.dueDate!)) {
-          dueColor = cRed;
-        } else if (item.dueDate == todayStr) {
-          dueColor = cYellow;
-        }
-
-        spans.add(
-          TextSpan(
-            text: ' [due: ${item.dueDate}]',
-            style: TextStyle(color: dueColor),
-          ),
-        );
-      }
-    }
-
-    final age = _getAge(item.timestamp);
-    if (age != null)
-      spans.add(
-        TextSpan(
-          text: ' ${age}d',
-          style: const TextStyle(color: cDim),
-        ),
-      );
-    if (item.isStarred)
-      spans.add(
-        const TextSpan(
-          text: ' ★',
-          style: TextStyle(color: cYellow),
-        ),
-      );
-
-    if (item.tags.isNotEmpty) {
-      spans.add(
-        TextSpan(
-          text: '  ${item.tags.join(' ')}',
-          style: const TextStyle(color: cDim),
-        ),
-      );
-    }
-
-    // 👇 UPDATED: Search the correct pool for children
-    final children =
-        pool.values
-            .where((c) => c.parentId == item.id && !seen.contains(c.id))
-            .toList()
-          ..sort((a, b) => a.id.compareTo(b.id));
-
-    for (var child in children) {
-      spans.add(const TextSpan(text: '\n'));
-      spans.addAll(
-        _formatItemLine(
-          child,
-          indent: indent == 0 ? 6 : indent + 4,
-          parentBoards: parentBoards ?? item.boards,
-          visited: seen,
-          isArchive: isArchive, // 👈 NEW: Pass the flag down the tree
-        ),
-      );
-    }
-
-    return spans;
-  }
-
-  int? _getAge(int ts) {
-    final days = DateTime.now()
-        .difference(DateTime.fromMillisecondsSinceEpoch(ts))
-        .inDays;
-    return days == 0 ? null : days;
-  }
-
-  Map<String, List<TaskItem>> _groupByBoard() {
-    final groups = <String, List<TaskItem>>{};
-    for (var it in items.values) {
-      if (it.parentId != null) continue;
-      for (var b in it.boards) {
-        groups.putIfAbsent(b, () => []).add(it);
-      }
-    }
-    for (var b in groups.keys) {
-      groups[b]!.sort((a, b) => a.id.compareTo(b.id));
-    }
-    return groups;
-  }
-
-  Map<String, List<TaskItem>> _groupByDate() {
-    final groups = <String, List<TaskItem>>{};
-    for (var it in items.values) {
-      if (it.parentId != null) continue;
-      groups.putIfAbsent(it.dateString, () => []).add(it);
-    }
-    for (var d in groups.keys) {
-      groups[d]!.sort((a, b) => a.id.compareTo(b.id));
-    }
-    return groups;
-  }
-
-  ({int percent, int complete, int inProgress, int pending, int notes})
-  _computeStats() {
-    int c = 0, i = 0, p = 0, n = 0;
-    for (var it in items.values) {
-      if (!it.isTask)
-        n++;
-      else if (it.isComplete)
-        c++;
-      else if (it.inProgress)
-        i++;
-      else
-        p++;
-    }
-    final total = c + i + p;
-    return (
-      percent: total == 0 ? 0 : (c * 100 ~/ total),
-      complete: c,
-      inProgress: i,
-      pending: p,
-      notes: n,
-    );
-  }
 
   ({bool error, String msg}) setAlias(List<String> args) {
     if (args.isEmpty) {
@@ -1071,5 +704,109 @@ class Core {
     aliases[aliasName] = commandStr;
     _save();
     return (error: false, msg: 'Alias set! $aliasName -> "$commandStr"');
+  }
+
+  ({bool error, String msg}) manageSettings(List<String> args) {
+    if (args.isEmpty) {
+      final fsDiff = fontSize != 13.5;
+      final fsPrefix = fsDiff ? '* ' : '  ';
+      final fsFormatted =
+          '${fsPrefix}manage font_size <number>              : Set the terminal font size. '
+          '${fsDiff ? '(current: $fontSize, default: 13.5)' : '(default: 13.5)'}';
+
+      final opDiff = opacity != 1.0;
+      final opPrefix = opDiff ? '* ' : '  ';
+      final opFormatted =
+          '${opPrefix}manage opacity <0.1-1.0>               : Set the window opacity. '
+          '${opDiff ? '(current: $opacity, default: 1.0)' : '(default: 1.0)'}';
+
+      final dfDiff = defaultView != 'board';
+      final dfPrefix = dfDiff ? '* ' : '  ';
+      final dfFormatted =
+          '${dfPrefix}manage default <board|timeline>        : Set default view on start and empty command. '
+          '${dfDiff ? '(current: $defaultView, default: board)' : '(default: board)'}';
+
+      final hlDiff = historyLimit != 100;
+      final hlPrefix = hlDiff ? '* ' : '  ';
+      final hlFormatted =
+          '${hlPrefix}manage history_limit <num>             : Set maximum number of command history. '
+          '${hlDiff ? '(current: $historyLimit, default: 100)' : '(default: 100)'}';
+
+      return (
+        error: false,
+        msg:
+            'ACTIVE CONFIGURATIONS & COMMANDS\n'
+            '$fsFormatted\n'
+            '$opFormatted\n'
+            '$dfFormatted\n'
+            '$hlFormatted\n'
+            '  manage reset                           : Reset all configurations.',
+      );
+    }
+
+    final sub = args[0].toLowerCase();
+    if (sub == 'reset') {
+      resetSettings();
+      return (error: false, msg: 'Settings reset to default values.');
+    } else if (sub == 'font_size') {
+      if (args.length < 2) {
+        return (error: true, msg: 'Usage: manage font_size <number>');
+      }
+      final size = double.tryParse(args[1]);
+      if (size == null || size <= 0) {
+        return (error: true, msg: 'Font size must be a positive number.');
+      }
+      fontSize = size;
+      forceSaveImmediate();
+      return (error: false, msg: 'Font size set to $size');
+    } else if (sub == 'opacity') {
+      if (args.length < 2) {
+        return (error: true, msg: 'Usage: manage opacity <0.1-1.0>');
+      }
+      final op = double.tryParse(args[1]);
+      if (op == null || op < 0.1 || op > 1.0) {
+        return (
+          error: true,
+          msg: 'Opacity must be a number between 0.1 and 1.0 (inclusive).',
+        );
+      }
+      opacity = op;
+      forceSaveImmediate();
+      return (error: false, msg: 'Opacity set to $op');
+    } else if (sub == 'default') {
+      if (args.length < 2) {
+        return (error: true, msg: 'Usage: manage default <board|timeline>');
+      }
+      final view = args[1].toLowerCase();
+      if (view != 'board' && view != 'timeline') {
+        return (
+          error: true,
+          msg: 'Default view must be "board" or "timeline".',
+        );
+      }
+      defaultView = view;
+      forceSaveImmediate();
+      return (error: false, msg: 'Default view set to $view');
+    } else if (sub == 'history_limit') {
+      if (args.length < 2) {
+        return (error: true, msg: 'Usage: manage history_limit <number>');
+      }
+      final limit = int.tryParse(args[1]);
+      if (limit == null || limit <= 0) {
+        return (error: true, msg: 'History limit must be a positive integer.');
+      }
+      historyLimit = limit;
+      while (history.length > historyLimit) {
+        history.removeAt(0);
+      }
+      forceSaveImmediate();
+      return (error: false, msg: 'History limit set to $limit');
+    }
+
+    return (
+      error: true,
+      msg:
+          'Unknown manage option "$sub". Options are font_size, opacity, default, history_limit, reset.',
+    );
   }
 }

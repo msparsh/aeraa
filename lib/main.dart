@@ -9,6 +9,7 @@ import 'storage.dart';
 part 'terminal_screen.dart';
 part 'task_item.dart';
 part 'core.dart';
+part 'renderer.dart';
 
 // ─── Design tokens ────────────────────────────────────────────────────────────
 
