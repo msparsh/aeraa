@@ -16,6 +16,8 @@ class Core {
   String defaultView = 'board';
   int historyLimit = 100;
   List<String> history = [];
+  bool showGlobalAge = true;
+  bool showGlobalTags = true;
 
   Core() {}
 
@@ -39,6 +41,8 @@ class Core {
         opacity = (s['opacity'] as num?)?.toDouble() ?? 1.0;
         defaultView = s['default'] as String? ?? 'board';
         historyLimit = s['history_limit'] as int? ?? 100;
+        showGlobalAge = s['show_global_age'] as bool? ?? true;
+        showGlobalTags = s['show_global_tags'] as bool? ?? true;
       }
       if (data['history'] != null) {
         history = List<String>.from(data['history'] as List);
@@ -51,6 +55,8 @@ class Core {
     opacity = 1.0;
     defaultView = 'board';
     historyLimit = 100;
+    showGlobalAge = true;
+    showGlobalTags = true;
     _save();
   }
 
@@ -85,6 +91,8 @@ class Core {
       'opacity': opacity,
       'default': defaultView,
       'history_limit': historyLimit,
+      'show_global_age': showGlobalAge,
+      'show_global_tags': showGlobalTags,
     },
     'history': history,
   };
@@ -732,6 +740,18 @@ class Core {
           '${hlPrefix}manage history_limit <num>             : Set maximum number of command history. '
           '${hlDiff ? '(current: $historyLimit, default: 100)' : '(default: 100)'}';
 
+      final ageDiff = !showGlobalAge;
+      final agePrefix = ageDiff ? '* ' : '  ';
+      final ageFormatted =
+          '${agePrefix}manage age <true|false>               : Set whether relative age of tasks is shown. '
+          '${ageDiff ? '(current: $showGlobalAge, default: true)' : '(default: true)'}';
+
+      final tagsDiff = !showGlobalTags;
+      final tagsPrefix = tagsDiff ? '* ' : '  ';
+      final tagsFormatted =
+          '${tagsPrefix}manage tags <true|false>              : Set whether category tags are shown. '
+          '${tagsDiff ? '(current: $showGlobalTags, default: true)' : '(default: true)'}';
+
       return (
         error: false,
         msg:
@@ -740,6 +760,8 @@ class Core {
             '$opFormatted\n'
             '$dfFormatted\n'
             '$hlFormatted\n'
+            '$ageFormatted\n'
+            '$tagsFormatted\n'
             '  manage reset                           : Reset all configurations.',
       );
     }
@@ -801,12 +823,34 @@ class Core {
       }
       forceSaveImmediate();
       return (error: false, msg: 'History limit set to $limit');
+    } else if (sub == 'age' || sub == 'show_age') {
+      if (args.length < 2) {
+        return (error: true, msg: 'Usage: manage age <true|false>');
+      }
+      final val = args[1].toLowerCase();
+      if (val != 'true' && val != 'false') {
+        return (error: true, msg: 'Value must be "true" or "false".');
+      }
+      showGlobalAge = val == 'true';
+      forceSaveImmediate();
+      return (error: false, msg: 'Show age set to $showGlobalAge');
+    } else if (sub == 'tags' || sub == 'show_tags') {
+      if (args.length < 2) {
+        return (error: true, msg: 'Usage: manage tags <true|false>');
+      }
+      final val = args[1].toLowerCase();
+      if (val != 'true' && val != 'false') {
+        return (error: true, msg: 'Value must be "true" or "false".');
+      }
+      showGlobalTags = val == 'true';
+      forceSaveImmediate();
+      return (error: false, msg: 'Show tags set to $showGlobalTags');
     }
 
     return (
       error: true,
       msg:
-          'Unknown manage option "$sub". Options are font_size, opacity, default, history_limit, reset.',
+          'Unknown manage option "$sub". Options are font_size, opacity, default, history_limit, age, tags, reset.',
     );
   }
 }

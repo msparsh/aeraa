@@ -27,26 +27,26 @@ class _TerminalScreenState extends State<TerminalScreen> {
   static const _helpMenu = '''
 COMMAND REFERENCE
 
-CREATE
+Create
   task, -t, add <desc>      : Create a task (Options: @board #tag due:DD-MM-YYYY p:1-3)
   note, -n <desc>           : Create a note (Options: @board #tag)
   sub, subtask <id> <desc>  : Create a subtask under a specific parent ID
 
-VIEW & FILTER
+View & Filter
   board                     : Show the default board view
   timeline, -i              : Show tasks grouped by creation date
   list, -l, ls [filters]    : Search and filter items. 
                               Filters: @board, #tag, -#tag (exclude), star, done, pending, progress, task, note
   archive, -a               : View the archive (if no IDs are provided)
 
-UPDATE STATE
+Update
   check, -c <id...>         : Toggle complete/pending status
   begin, -b <id...>         : Toggle in-progress/paused status
   star, -s <id...>          : Toggle starred status
   priority, -p <id> [1-3]   : Set priority level (omitting the level cycles it)
   due <id> [DD-MM-YYYY]     : Set due date (use "none" to remove)
 
-MODIFY & ORGANIZE
+Modify & Organize
   edit, -e <id> <desc>      : Edit an item's description
   tag <id> #tag1...         : Toggle specific tags on an item
   move, mv, -m <id> <dest>  : Nest under a parent ID, or unnest to @boards
@@ -54,12 +54,12 @@ MODIFY & ORGANIZE
   restore, -r <id...>       : Restore items from the archive
   sweep                     : Clear and archive all completed tasks
 
-  SYSTEM
-    alias <name> <cmd>        : Create a shortcut (e.g., alias hw list @homework)
-    alias <name> none         : Remove a specific alias
-    alias                     : List all active aliases
-    manage                    : View and modify configuration settings
-    help, -h, --help          : Show this menu
+System
+  alias <name> <cmd>        : Create a shortcut (e.g., alias hw list @homework)
+  alias <name> none         : Remove a specific alias
+  alias                     : List all active aliases
+  manage                    : View and modify configuration settings
+  help, -h, --help          : Show this menu
   ''';
 
   @override
@@ -154,7 +154,15 @@ MODIFY & ORGANIZE
 
     final spans = <InlineSpan>[];
     for (var it in rootItems) {
-      spans.addAll(tp.formatItemLine(it));
+      spans.addAll(
+        tp.formatItemLine(
+          it,
+          showBoards:
+              true, // 👈 Crucial for understanding where filtered results live
+          showTags: true,
+          showAge: true,
+        ),
+      );
       spans.add(const TextSpan(text: '\n'));
     }
     if (spans.isNotEmpty) spans.removeLast();

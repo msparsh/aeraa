@@ -102,7 +102,12 @@ class Renderer {
       ]);
 
       for (var it in itemsList) {
-        spans.addAll(formatItemLine(it));
+        spans.addAll(formatItemLine(
+          it,
+          showBoards: false, // Column headers already show this info
+          showAge: core.showGlobalAge, // Honors global manage profile configuration!
+          showTags: core.showGlobalTags,
+        ));
         spans.add(const TextSpan(text: '\n'));
       }
     }
@@ -170,7 +175,11 @@ class Renderer {
         ),
       );
       for (var it in groups[date]!) {
-        spans.addAll(formatItemLine(it));
+        spans.addAll(formatItemLine(
+          it,
+          showBoards: true,  // 👈 Enable board visibility here!
+          showAge: false,    // Optional: Hide age because date headers handle it
+        ));
         spans.add(const TextSpan(text: '\n'));
       }
     }
@@ -208,7 +217,11 @@ class Renderer {
           ..sort((a, b) => a.id.compareTo(b.id));
 
     for (var it in rootArchivedItems) {
-      spans.addAll(formatItemLine(it, isArchive: true));
+      spans.addAll(formatItemLine(
+        it,
+        isArchive: true,
+        showBoards: true, // Helpful to see where an archived item originally belonged
+      ));
       spans.add(const TextSpan(text: '\n'));
     }
 
@@ -223,6 +236,15 @@ class Renderer {
     List<String>? parentBoards,
     Set<int>? visited,
     bool isArchive = false,
+    // 👇 Contextual toggle arguments
+    bool showId = true,
+    bool showStatus = true,
+    bool showPriority = true,
+    bool showDue = true,
+    bool showAge = true,
+    bool showStar = true,
+    bool showTags = true,
+    bool showBoards = false,
   }) {
     final seen = visited ?? <int>{};
     seen.add(item.id);
@@ -259,19 +281,34 @@ class Renderer {
     final spacing = ' ' * (indent == 0 ? 2 : indent);
     final spans = <InlineSpan>[
       TextSpan(text: spacing),
-      TextSpan(
-        text: '${item.id}.',
-        style: const TextStyle(color: cDim),
-      ),
-      TextSpan(
-        text: ' $prefix ',
-        style: TextStyle(color: pColor),
-      ),
-      TextSpan(text: item.description, style: dStyle),
     ];
 
+    // 1. 🪪 ID Element
+    if (showId) {
+      spans.add(
+        TextSpan(
+          text: '${item.id}.',
+          style: const TextStyle(color: cDim),
+        ),
+      );
+    }
+
+    // 2. 🚦 Status Icon Prefix Element
+    if (showStatus) {
+      spans.add(
+        TextSpan(
+          text: ' $prefix ',
+          style: TextStyle(color: pColor),
+        ),
+      );
+    }
+
+    // 3. 📝 Description Element (Always Visible)
+    spans.add(TextSpan(text: item.description, style: dStyle));
+
+    // 4. ⚠️ Priority Warning Element
     if (item.isTask && !item.isComplete) {
-      if (item.priority >= 2) {
+      if (showPriority && item.priority >= 2) {
         spans.add(
           const TextSpan(
             text: ' (!)',
@@ -280,7 +317,8 @@ class Renderer {
         );
       }
 
-      if (item.dueDate != null) {
+      // 5. 📅 Due Date Element
+      if (showDue && item.dueDate != null) {
         final now = DateTime.now();
         final todayStr =
             '${now.day.toString().padLeft(2, '0')}-${now.month.toString().padLeft(2, '0')}-${now.year}';
@@ -301,16 +339,21 @@ class Renderer {
       }
     }
 
-    final age = _getAge(item.timestamp);
-    if (age != null) {
-      spans.add(
-        TextSpan(
-          text: ' ${age}d',
-          style: const TextStyle(color: cDim),
-        ),
-      );
+    // 6. ⏳ Relative Age Element
+    if (showAge) {
+      final age = _getAge(item.timestamp);
+      if (age != null) {
+        spans.add(
+          TextSpan(
+            text: ' ${age}d',
+            style: const TextStyle(color: cDim),
+          ),
+        );
+      }
     }
-    if (item.isStarred) {
+
+    // 7. ⭐ Star Badge Element
+    if (showStar && item.isStarred) {
       spans.add(
         const TextSpan(
           text: ' ★',
@@ -319,7 +362,8 @@ class Renderer {
       );
     }
 
-    if (item.tags.isNotEmpty) {
+    // 8. 🏷️ Category Tags Element
+    if (showTags && item.tags.isNotEmpty) {
       spans.add(
         TextSpan(
           text: '  ${item.tags.join(' ')}',
@@ -328,6 +372,20 @@ class Renderer {
       );
     }
 
+    // 9. 🗂️ Project Boards Workspace Element
+    if (showBoards && item.boards.isNotEmpty) {
+      final displayBoards = item.boards
+          .map((b) => b == 'inbox' ? '@inbox' : b)
+          .join(' ');
+      spans.add(
+        TextSpan(
+          text: '  $displayBoards',
+          style: const TextStyle(color: cPurple),
+        ),
+      );
+    }
+
+    // ── Recursive Loop for Subtasks ──
     final children =
         pool.values
             .where((c) => c.parentId == item.id && !seen.contains(c.id))
@@ -343,6 +401,15 @@ class Renderer {
           parentBoards: parentBoards ?? item.boards,
           visited: seen,
           isArchive: isArchive,
+          // Forwarding exact profile values down to subtasks! 🔄
+          showId: showId,
+          showStatus: showStatus,
+          showPriority: showPriority,
+          showDue: showDue,
+          showAge: showAge,
+          showStar: showStar,
+          showTags: showTags,
+          showBoards: showBoards,
         ),
       );
     }
