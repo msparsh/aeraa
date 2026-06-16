@@ -102,12 +102,15 @@ class Renderer {
       ]);
 
       for (var it in itemsList) {
-        spans.addAll(formatItemLine(
-          it,
-          showBoards: false, // Column headers already show this info
-          showAge: core.showGlobalAge, // Honors global manage profile configuration!
-          showTags: core.showGlobalTags,
-        ));
+        spans.addAll(
+          formatItemLine(
+            it,
+            showBoards: false, // Column headers already show this info
+            showAge: core
+                .showGlobalAge, // Honors global manage profile configuration!
+            showTags: core.showGlobalTags,
+          ),
+        );
         spans.add(const TextSpan(text: '\n'));
       }
     }
@@ -175,11 +178,13 @@ class Renderer {
         ),
       );
       for (var it in groups[date]!) {
-        spans.addAll(formatItemLine(
-          it,
-          showBoards: true,  // 👈 Enable board visibility here!
-          showAge: false,    // Optional: Hide age because date headers handle it
-        ));
+        spans.addAll(
+          formatItemLine(
+            it,
+            showBoards: true, // 👈 Enable board visibility here!
+            showAge: false, // Optional: Hide age because date headers handle it
+          ),
+        );
         spans.add(const TextSpan(text: '\n'));
       }
     }
@@ -217,11 +222,14 @@ class Renderer {
           ..sort((a, b) => a.id.compareTo(b.id));
 
     for (var it in rootArchivedItems) {
-      spans.addAll(formatItemLine(
-        it,
-        isArchive: true,
-        showBoards: true, // Helpful to see where an archived item originally belonged
-      ));
+      spans.addAll(
+        formatItemLine(
+          it,
+          isArchive: true,
+          showBoards: true,
+          showStatus: false,
+        ),
+      );
       spans.add(const TextSpan(text: '\n'));
     }
 
@@ -278,10 +286,12 @@ class Renderer {
       dStyle = const TextStyle(color: cDim);
     }
 
+    if (isArchive) {
+      dStyle = const TextStyle(color: cDim);
+    }
+
     final spacing = ' ' * (indent == 0 ? 2 : indent);
-    final spans = <InlineSpan>[
-      TextSpan(text: spacing),
-    ];
+    final spans = <InlineSpan>[TextSpan(text: spacing)];
 
     // 1. 🪪 ID Element
     if (showId) {

@@ -301,16 +301,46 @@ class Core {
   ({bool error, String msg}) toggleArchive(List<String> idsRaw) {
     final toggled = <String>[];
     final notFound = <String>[];
+    final targetIds = <int>{};
+
+    String normalizeBoard(String b) {
+      final lower = b.toLowerCase();
+      if (lower == '@inbox' || lower == 'inbox') return 'inbox';
+      if (lower.startsWith('@')) return lower;
+      return '@$lower';
+    }
+
+    // Normalization Pass
+    for (var raw in idsRaw) {
+      final id = int.tryParse(raw);
+      if (id != null) {
+        if (items.containsKey(id) || archive.containsKey(id)) {
+          targetIds.add(id);
+        } else {
+          notFound.add(raw);
+        }
+      } else if (raw.startsWith('@')) {
+        final targetBoard = normalizeBoard(raw);
+        var foundAny = false;
+        for (var item in items.values) {
+          if (item.boards.map(normalizeBoard).contains(targetBoard)) {
+            targetIds.add(item.id);
+            foundAny = true;
+          }
+        }
+        if (!foundAny) {
+          notFound.add(raw);
+        }
+      } else {
+        notFound.add(raw);
+      }
+    }
+
     final processed =
         <int>{}; // 👈 CRITICAL: Track IDs to prevent double-bouncing!
 
-    for (var raw in idsRaw) {
-      final id = int.tryParse(raw);
-      if (id == null) {
-        notFound.add(raw);
-        continue;
-      }
-
+    // The "Family Tree" Sweep
+    for (var id in targetIds) {
       // 👈 CRITICAL: Skip if already moved as part of a parent's family tree
       if (processed.contains(id)) continue;
 
@@ -340,17 +370,19 @@ class Core {
         }
         processed.addAll(family); // 👈 Mark family as processed
         toggled.add('$id (restored)');
-      } else {
-        notFound.add(raw);
       }
     }
 
     if (toggled.isEmpty) {
-      return (error: true, msg: 'IDs not found: ${notFound.join(', ')}');
+      return (error: true, msg: 'IDs/Boards not found: ${notFound.join(', ')}');
     }
 
     _save();
-    return (error: false, msg: ' ${toggled.join(', ')} ');
+    final msgBuffer = StringBuffer(toggled.join(', '));
+    if (notFound.isNotEmpty) {
+      msgBuffer.write('. Unresolved: ${notFound.join(', ')}');
+    }
+    return (error: false, msg: ' ${msgBuffer.toString()} ');
   }
 
   ({bool error, String msg}) editItem(String idRaw, String newDesc) {
@@ -740,18 +772,6 @@ class Core {
           '${hlPrefix}manage history_limit <num>             : Set maximum number of command history. '
           '${hlDiff ? '(current: $historyLimit, default: 100)' : '(default: 100)'}';
 
-      final ageDiff = !showGlobalAge;
-      final agePrefix = ageDiff ? '* ' : '  ';
-      final ageFormatted =
-          '${agePrefix}manage age <true|false>               : Set whether relative age of tasks is shown. '
-          '${ageDiff ? '(current: $showGlobalAge, default: true)' : '(default: true)'}';
-
-      final tagsDiff = !showGlobalTags;
-      final tagsPrefix = tagsDiff ? '* ' : '  ';
-      final tagsFormatted =
-          '${tagsPrefix}manage tags <true|false>              : Set whether category tags are shown. '
-          '${tagsDiff ? '(current: $showGlobalTags, default: true)' : '(default: true)'}';
-
       return (
         error: false,
         msg:
@@ -760,8 +780,6 @@ class Core {
             '$opFormatted\n'
             '$dfFormatted\n'
             '$hlFormatted\n'
-            '$ageFormatted\n'
-            '$tagsFormatted\n'
             '  manage reset                           : Reset all configurations.',
       );
     }
@@ -823,34 +841,12 @@ class Core {
       }
       forceSaveImmediate();
       return (error: false, msg: 'History limit set to $limit');
-    } else if (sub == 'age' || sub == 'show_age') {
-      if (args.length < 2) {
-        return (error: true, msg: 'Usage: manage age <true|false>');
-      }
-      final val = args[1].toLowerCase();
-      if (val != 'true' && val != 'false') {
-        return (error: true, msg: 'Value must be "true" or "false".');
-      }
-      showGlobalAge = val == 'true';
-      forceSaveImmediate();
-      return (error: false, msg: 'Show age set to $showGlobalAge');
-    } else if (sub == 'tags' || sub == 'show_tags') {
-      if (args.length < 2) {
-        return (error: true, msg: 'Usage: manage tags <true|false>');
-      }
-      final val = args[1].toLowerCase();
-      if (val != 'true' && val != 'false') {
-        return (error: true, msg: 'Value must be "true" or "false".');
-      }
-      showGlobalTags = val == 'true';
-      forceSaveImmediate();
-      return (error: false, msg: 'Show tags set to $showGlobalTags');
     }
 
     return (
       error: true,
       msg:
-          'Unknown manage option "$sub". Options are font_size, opacity, default, history_limit, age, tags, reset.',
+          'Unknown manage option "$sub". Options are font_size, opacity, default, history_limit, reset.',
     );
   }
 }

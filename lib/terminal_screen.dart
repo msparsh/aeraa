@@ -37,7 +37,7 @@ View & Filter
   timeline, -i              : Show tasks grouped by creation date
   list, -l, ls [filters]    : Search and filter items. 
                               Filters: @board, #tag, -#tag (exclude), star, done, pending, progress, task, note
-  archive, -a               : View the archive (if no IDs are provided)
+  archive, -a               : View the archive
 
 Update
   check, -c <id...>         : Toggle complete/pending status
@@ -305,6 +305,8 @@ System
       case 'star' || '-s':
         _executeOrView(tailArgs, action: tb.starItems, viewFlag: 'star');
 
+      case 'delete' || '-d' when tailArgs.isEmpty:
+        _addResponse('Usage: delete id1 [id2 ... / @board1 ...]');
       case 'delete' || '-d':
         final res = tb.toggleArchive(tailArgs);
         _addResponse(res.error ? 'Error: ${res.msg}' : res.msg);
@@ -364,11 +366,13 @@ System
         final res = tb.updateDue(tailArgs[0], targetDate);
         _addResponse(res.error ? 'Error: ${res.msg}' : res.msg);
 
-      case 'archive' || '-a' when tailArgs.isEmpty:
+      case 'archive' || '-a' when tailArgs.isNotEmpty:
+        _addResponse('Usage: archive');
+      case 'archive' || '-a':
         _addNode(widget: tp.getArchiveView());
       case 'restore' || '-r' when tailArgs.isEmpty:
         _addResponse('Usage: restore id1 [id2 ...]');
-      case 'archive' || '-a' || 'restore' || '-r':
+      case 'restore' || '-r':
         final res = tb.toggleArchive(tailArgs);
         _addResponse(res.error ? 'Error: ${res.msg}' : res.msg);
 
