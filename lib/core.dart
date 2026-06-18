@@ -1,7 +1,5 @@
 part of 'main.dart';
 
-// --- TASKBOOK ENGINE ---
-
 class Core {
   Map<int, TaskItem> items = {};
   Map<int, TaskItem> archive = {};
@@ -587,7 +585,6 @@ class Core {
     );
   }
 
-
   Map<int, TaskItem> filterItems(List<String> args) {
     final boards = <String>{};
     final reqTags = <String>{};
@@ -663,7 +660,6 @@ class Core {
       }),
     );
   }
-
 
   ({bool error, String msg}) setAlias(List<String> args) {
     if (args.isEmpty) {

@@ -2,7 +2,6 @@ part of 'main.dart';
 
 // --- TERMINAL UI ---
 
-/// Data record for storing terminal output history
 typedef TerminalNode = ({String? command, Widget? widget});
 
 class TerminalScreen extends StatefulWidget {
@@ -13,8 +12,8 @@ class TerminalScreen extends StatefulWidget {
 }
 
 class _TerminalScreenState extends State<TerminalScreen> {
-  final Core tb = Core();
-  late final Renderer tp = Renderer(tb);
+  final Core app = Core();
+  late final Renderer tp = Renderer(app);
   final TextEditingController _cmdController = TextEditingController();
   final FocusNode _focusNode = FocusNode();
   final ScrollController _scrollController = ScrollController();
@@ -65,18 +64,18 @@ System
   @override
   void initState() {
     super.initState();
-    _initializeTaskbook();
+    _initializeTaskTerminal();
   }
 
-  Future<void> _initializeTaskbook() async {
-    await tb.init();
+  Future<void> _initializeTaskTerminal() async {
+    await app.init();
     try {
-      await windowManager.setOpacity(tb.opacity);
+      await windowManager.setOpacity(app.opacity);
     } catch (_) {}
     if (mounted) {
       setState(() {
         _cmdHistory.clear();
-        _cmdHistory.addAll(tb.history);
+        _cmdHistory.addAll(app.history);
         _historyPos = _cmdHistory.length;
       });
       _handleCommand('');
@@ -108,11 +107,11 @@ System
     if (_cmdHistory.isNotEmpty && _cmdHistory.last == cmd) return;
     _cmdHistory.add(cmd);
     _trimHistory();
-    tb.saveHistory(_cmdHistory);
+    app.saveHistory(_cmdHistory);
   }
 
   void _trimHistory() {
-    while (_cmdHistory.length > tb.historyLimit) {
+    while (_cmdHistory.length > app.historyLimit) {
       _cmdHistory.removeAt(0);
     }
   }
@@ -132,7 +131,7 @@ System
           color: isError ? const Color(0xFFE06C75) : const Color(0xFFCCCCCC),
           fontFamily: 'JetBrains Mono',
           fontFamilyFallback: _kMono,
-          fontSize: tb.fontSize,
+          fontSize: app.fontSize,
           height: _kLineH,
         ),
       ),
@@ -141,7 +140,7 @@ System
 
   /// Universal method to display a list of items based on filter arguments 📋
   void _displayList(List<String> filterArgs) {
-    final filtered = tb.filterItems(filterArgs);
+    final filtered = app.filterItems(filterArgs);
     if (filtered.isEmpty) {
       _addResponse('No items match your criteria.');
       return;
@@ -173,7 +172,7 @@ System
           style: TextStyle(
             fontFamily: 'JetBrains Mono',
             fontFamilyFallback: _kMono,
-            fontSize: tb.fontSize,
+            fontSize: app.fontSize,
             height: _kLineH,
             color: const Color(0xFFCCCCCC),
           ),
@@ -208,7 +207,7 @@ System
   void _handleCommand(String raw, [Set<String>? visited]) async {
     final trimmed = raw.trim();
     if (trimmed.isEmpty) {
-      if (tb.defaultView == 'timeline') {
+      if (app.defaultView == 'timeline') {
         _addNode(widget: tp.getTimelineView());
       } else {
         _addNode(widget: tp.getBoardView());
@@ -234,7 +233,7 @@ System
                 color: const Color.fromARGB(255, 255, 255, 255),
                 fontFamily: 'JetBrains Mono',
                 fontFamilyFallback: _kMono,
-                fontSize: tb.fontSize,
+                fontSize: app.fontSize,
                 fontWeight: FontWeight.w600,
               ),
             ),
@@ -244,7 +243,7 @@ System
                 color: const Color(0xFFEEEEEE),
                 fontFamily: 'JetBrains Mono',
                 fontFamilyFallback: _kMono,
-                fontSize: tb.fontSize,
+                fontSize: app.fontSize,
               ),
             ),
           ],
@@ -254,7 +253,7 @@ System
 
     // 👇 NEW: ALIAS INTERCEPTOR 🕵️‍♂️
     // If the typed command matches an alias, swap it out and re-run!
-    if (tb.aliases.containsKey(mainCmd)) {
+    if (app.aliases.containsKey(mainCmd)) {
       final activeVisited = visited ?? <String>{};
       if (activeVisited.contains(mainCmd)) {
         _addResponse('Error: Circular alias loop detected for "$mainCmd"');
@@ -262,7 +261,7 @@ System
       }
       activeVisited.add(mainCmd);
 
-      final aliasedCmd = tb.aliases[mainCmd]!;
+      final aliasedCmd = app.aliases[mainCmd]!;
       // Append any extra arguments the user passed after the alias
       final extraArgs = tailArgs.isNotEmpty ? ' ${tailArgs.join(' ')}' : '';
 
@@ -280,11 +279,11 @@ System
         _addNode(widget: tp.getBoardView());
 
       case 'task' || '-t' || 'add':
-        final res = tb.createTask(tailArgs);
+        final res = app.createTask(tailArgs);
         _addResponse(res.error ? 'Error: ${res.msg}' : res.msg);
 
       case 'note' || '-n':
-        final res = tb.createNote(tailArgs);
+        final res = app.createNote(tailArgs);
         _addResponse(res.error ? 'Error: ${res.msg}' : res.msg);
 
       case 'list' || '-l' || 'ls':
@@ -293,32 +292,32 @@ System
       case 'tag' when tailArgs.length < 2:
         _addResponse('Usage: tag id #tag1 [#tag2 ...]');
       case 'tag':
-        final res = tb.toggleTag(tailArgs[0], tailArgs.sublist(1));
+        final res = app.toggleTag(tailArgs[0], tailArgs.sublist(1));
         _addResponse(res.error ? 'Error: ${res.msg}' : res.msg);
 
       case 'check' || '-c':
-        _executeOrView(tailArgs, action: tb.checkTasks, viewFlag: 'done');
+        _executeOrView(tailArgs, action: app.checkTasks, viewFlag: 'done');
 
       case 'begin' || '-b':
-        _executeOrView(tailArgs, action: tb.beginTasks, viewFlag: 'progress');
+        _executeOrView(tailArgs, action: app.beginTasks, viewFlag: 'progress');
 
       case 'star' || '-s':
-        _executeOrView(tailArgs, action: tb.starItems, viewFlag: 'star');
+        _executeOrView(tailArgs, action: app.starItems, viewFlag: 'star');
 
       case 'delete' || '-d' when tailArgs.isEmpty:
         _addResponse('Usage: delete id1 [id2 ... / @board1 ...]');
       case 'delete' || '-d':
-        final res = tb.toggleArchive(tailArgs);
+        final res = app.toggleArchive(tailArgs);
         _addResponse(res.error ? 'Error: ${res.msg}' : res.msg);
 
       case 'sweep':
-        final res = tb.clearCompleted();
+        final res = app.clearCompleted();
         _addResponse(res.msg);
 
       case 'edit' || '-e' when tailArgs.length < 2:
         _addResponse('Usage: edit id new description');
       case 'edit' || '-e':
-        final res = tb.editItem(tailArgs[0], tailArgs.sublist(1).join(' '));
+        final res = app.editItem(tailArgs[0], tailArgs.sublist(1).join(' '));
         _addResponse(res.error ? 'Error: ${res.msg}' : res.msg);
 
       case 'move' || 'mv' || '-m' || 'm' when tailArgs.isEmpty:
@@ -326,7 +325,7 @@ System
           'Usage: mv id parent_id OR mv id @board1 @board2 (unlinks)',
         );
       case 'move' || 'mv' || '-m' || 'm' when tailArgs.length == 1:
-        final res = tb.moveBoards(tailArgs[0], ['inbox']);
+        final res = app.moveBoards(tailArgs[0], ['inbox']);
         _addResponse(res.error ? 'Error: ${res.msg}' : res.msg);
       case 'move' || 'mv' || '-m' || 'm':
         final id = tailArgs[0];
@@ -337,23 +336,23 @@ System
             _addResponse('Error: Reparenting only takes one target ID.');
             return;
           }
-          final res = tb.reparentTask(id, targetFlag);
+          final res = app.reparentTask(id, targetFlag);
           _addResponse(res.error ? 'Error: ${res.msg}' : res.msg);
         } else {
-          final res = tb.moveBoards(id, tailArgs.sublist(1));
+          final res = app.moveBoards(id, tailArgs.sublist(1));
           _addResponse(res.error ? 'Error: ${res.msg}' : res.msg);
         }
 
       case 'sub' || 'subtask' when tailArgs.length < 2:
         _addResponse('Usage: sub id [options] description');
       case 'sub' || 'subtask':
-        final res = tb.createSubtask(tailArgs[0], tailArgs.sublist(1));
+        final res = app.createSubtask(tailArgs[0], tailArgs.sublist(1));
         _addResponse(res.error ? 'Error: ${res.msg}' : res.msg);
 
       case 'priority' || '-p' when tailArgs.isEmpty || tailArgs.length > 2:
         _addResponse('Usage: priority id [1|2|3]');
       case 'priority' || '-p':
-        final res = tb.updatePriority(
+        final res = app.updatePriority(
           tailArgs[0],
           tailArgs.length > 1 ? tailArgs[1] : null,
         );
@@ -363,7 +362,7 @@ System
         _addResponse('Usage: due id [DD-MM-YYYY] (leave date blank to remove)');
       case 'due':
         final targetDate = tailArgs.length > 1 ? tailArgs[1] : 'none';
-        final res = tb.updateDue(tailArgs[0], targetDate);
+        final res = app.updateDue(tailArgs[0], targetDate);
         _addResponse(res.error ? 'Error: ${res.msg}' : res.msg);
 
       case 'archive' || '-a' when tailArgs.isNotEmpty:
@@ -373,24 +372,24 @@ System
       case 'restore' || '-r' when tailArgs.isEmpty:
         _addResponse('Usage: restore id1 [id2 ...]');
       case 'restore' || '-r':
-        final res = tb.toggleArchive(tailArgs);
+        final res = app.toggleArchive(tailArgs);
         _addResponse(res.error ? 'Error: ${res.msg}' : res.msg);
 
       case 'timeline' || '-i':
         _addNode(widget: tp.getTimelineView());
 
       case 'alias':
-        final res = tb.setAlias(tailArgs);
+        final res = app.setAlias(tailArgs);
         _addResponse(res.error ? 'Error: ${res.msg}' : res.msg);
 
       case 'manage':
-        final res = tb.manageSettings(tailArgs);
+        final res = app.manageSettings(tailArgs);
         if (!res.error) {
           try {
-            await windowManager.setOpacity(tb.opacity);
+            await windowManager.setOpacity(app.opacity);
           } catch (_) {}
           _trimHistory();
-          tb.saveHistory(_cmdHistory);
+          app.saveHistory(_cmdHistory);
           setState(() {});
         }
         _addResponse(res.error ? 'Error: ${res.msg}' : res.msg);
@@ -511,7 +510,7 @@ System
                     },
                     onSubmitted: _submitCommand,
                     onKeyEvent: _handleKeyEvent,
-                    fontSize: tb.fontSize,
+                    fontSize: app.fontSize,
                   ),
                 ],
               ),

@@ -57,16 +57,16 @@ void main() async {
     await windowManager.show();
     await windowManager.focus(); // Brings the window to the front on launch
   });
-  runApp(const TaskbookApp());
+  runApp(const TaskTerminal());
 }
 
-class TaskbookApp extends StatelessWidget {
-  const TaskbookApp({super.key});
+class TaskTerminal extends StatelessWidget {
+  const TaskTerminal({super.key});
 
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'Taskbook',
+      title: 'TaskTerminal',
       theme: ThemeData(
         scaffoldBackgroundColor: _kBg,
         applyElevationOverlayColor: false,
