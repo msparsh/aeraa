@@ -54,6 +54,7 @@ void main() async {
   );
 
   windowManager.waitUntilReadyToShow(windowOptions, () async {
+    windowManager.setTitle("Aeraa");
     await windowManager.show();
     await windowManager.focus(); // Brings the window to the front on launch
   });
@@ -66,7 +67,7 @@ class TaskTerminal extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'TaskTerminal',
+      title: 'Aeraa',
       theme: ThemeData(
         scaffoldBackgroundColor: _kBg,
         applyElevationOverlayColor: false,

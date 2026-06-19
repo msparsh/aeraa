@@ -1,7 +1,7 @@
-name: todo_flutter
+name: aeraa
 description: "A new Flutter project."
 publish_to: 'none'
-version: 2.4.0+1
+version: 2.5.0+1
 
 environment:
   sdk: ^3.12.2
@@ -22,9 +22,9 @@ flutter:
   uses-material-design: true
 
 msix_config:
-  display_name: Task Terminal
+  display_name: Aeraa
   publisher_display_name: Sparsh
-  identity_name: com.sparsh.todo
+  identity_name: com.sparsh.aeraa
   logo_path: windows/runner/resources/app_icon.ico
 
 
