@@ -1,10 +1,20 @@
 # Aeraa
 
-> A minimal, terminal-inspired, keyboard-driven to-do app for organizing your workflow. Built natively with Flutter. 💙
+<table>
+  <tr>
+    <td>
+      <p align="center">
+      <img src="/assets/images/app_icon.png" alt="Project Screenshot" width="250">
+      </p>
+    </td>
+    <td>
+      <strong>A minimal, terminal-inspired, keyboard-driven to-do app for organizing your workflow. Built natively with Flutter. 💙</strong><br>
+      Aeraa brings the speed and aesthetic of a command-line interface to a standalone desktop window. It is *not* a shell script or a web wrapper—it runs natively on your system, offering a fast, focused, and distraction-free environment to get things done. 💻🚀
+    </td>
+  </tr>
+</table>
 
-Aeraa brings the speed and aesthetic of a command-line interface to a standalone desktop window. It is *not* a shell script or a web wrapper—it runs natively on your system, offering a fast, focused, and distraction-free environment to get things done. 💻🚀
-
-This cross-platform app is the successor to my [Task Terminal](https://github.com/msparsh/task-terminal) (JavaScript) and is built upon the fantastic foundation of the [Taskbook](https://github.com/klaudiosinani/taskbook) project. Massive thanks to the creators! 🙏
+This cross-platform app is the successor to my [Task Terminal](https://github.com/msparsh/task-terminal) (JavaScript) and is built upon the fantastic foundation of the [Taskbook](https://github.com/klaudiosinani/taskbook) project. Massive thanks to the creator of the project! 🙏
 
 ## ✨ Features
 
