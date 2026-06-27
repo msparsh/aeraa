@@ -181,8 +181,10 @@ class Renderer {
         spans.addAll(
           formatItemLine(
             it,
-            showBoards: true, // 👈 Enable board visibility here!
-            showAge: false, // Optional: Hide age because date headers handle it
+            showBoards: true,
+            showAge: false,
+            // Check if the item is in the archive map
+            isArchive: core.archive.containsKey(it.id),
           ),
         );
         spans.add(const TextSpan(text: '\n'));
@@ -244,7 +246,6 @@ class Renderer {
     List<String>? parentBoards,
     Set<int>? visited,
     bool isArchive = false,
-    // 👇 Contextual toggle arguments
     bool showId = true,
     bool showStatus = true,
     bool showPriority = true,
@@ -286,26 +287,20 @@ class Renderer {
       dStyle = TextStyle(color: core.theme.dim);
     }
 
-    if (isArchive) {
-      dStyle = TextStyle(color: core.theme.dim);
-    }
+    if (isArchive) dStyle = TextStyle(color: core.theme.dim);
 
-    final spacing = ' ' * (indent == 0 ? 2 : indent);
-    final spans = <InlineSpan>[TextSpan(text: spacing)];
-
-    // 1. 🪪 ID Element
+    // 1. Separate the Prefix (ID + Status Icon)
+    final prefixSpans = <InlineSpan>[];
     if (showId) {
-      spans.add(
+      prefixSpans.add(
         TextSpan(
           text: '${item.id}.',
           style: TextStyle(color: core.theme.dim),
         ),
       );
     }
-
-    // 2. 🚦 Status Icon Prefix Element
     if (showStatus) {
-      spans.add(
+      prefixSpans.add(
         TextSpan(
           text: ' $prefix ',
           style: TextStyle(color: pColor),
@@ -313,34 +308,27 @@ class Renderer {
       );
     }
 
-    // 3. 📝 Description Element (Always Visible)
-    spans.add(TextSpan(text: item.description, style: dStyle));
+    // 2. Separate the Content (Description + Tags + Metadata)
+    final contentSpans = <InlineSpan>[];
+    contentSpans.add(TextSpan(text: item.description, style: dStyle));
 
-    // 4. ⚠️ Priority Warning Element
     if (item.isTask && !item.isComplete) {
       if (showPriority && item.priority >= 2) {
-        spans.add(
+        contentSpans.add(
           TextSpan(
             text: ' (!)',
             style: TextStyle(color: core.theme.yellow),
           ),
         );
       }
-
-      // 5. 📅 Due Date Element
       if (showDue && item.dueDate != null) {
         final now = DateTime.now();
         final todayStr =
             '${now.day.toString().padLeft(2, '0')}-${now.month.toString().padLeft(2, '0')}-${now.year}';
-
-        Color dueColor = core.theme.dim;
-        if (_isOverdue(item.dueDate!)) {
-          dueColor = core.theme.red;
-        } else if (item.dueDate == todayStr) {
-          dueColor = core.theme.yellow;
-        }
-
-        spans.add(
+        Color dueColor = _isOverdue(item.dueDate!)
+            ? core.theme.red
+            : (item.dueDate == todayStr ? core.theme.yellow : core.theme.dim);
+        contentSpans.add(
           TextSpan(
             text: ' [due: ${item.dueDate}]',
             style: TextStyle(color: dueColor),
@@ -349,58 +337,82 @@ class Renderer {
       }
     }
 
-    // 6. ⏳ Relative Age Element
     if (showAge) {
       final age = _getAge(item.timestamp);
-      if (age != null) {
-        spans.add(
+      if (age != null)
+        contentSpans.add(
           TextSpan(
             text: ' ${age}d',
             style: TextStyle(color: core.theme.dim),
           ),
         );
-      }
     }
-
-    // 7. ⭐ Star Badge Element
-    if (showStar && item.isStarred) {
-      spans.add(
+    if (showStar && item.isStarred)
+      contentSpans.add(
         TextSpan(
           text: ' ★',
           style: TextStyle(color: core.theme.yellow),
         ),
       );
-    }
-
-    // 8. 🏷️ Category Tags Element
-    if (showTags && item.tags.isNotEmpty) {
-      spans.add(
+    if (showTags && item.tags.isNotEmpty)
+      contentSpans.add(
         TextSpan(
           text: '  ${item.tags.join(' ')}',
           style: TextStyle(color: core.theme.dim),
         ),
       );
-    }
-
-    // 9. 🗂️ Project Boards Workspace Element
     if (showBoards && item.boards.isNotEmpty) {
-      final displayBoards = item.boards
-          .map((b) => b == 'inbox' ? '@inbox' : b)
-          .join(' ');
-      spans.add(
+      contentSpans.add(
         TextSpan(
-          text: '  $displayBoards',
+          text:
+              '  ${item.boards.map((b) => b == 'inbox' ? '@inbox' : b).join(' ')}',
           style: TextStyle(color: core.theme.purple),
         ),
       );
     }
+
+    // 3. Structural Setup for Hanging Indent
+    final baseStyle = TextStyle(
+      fontFamily: 'JetBrains Mono',
+      fontFamilyFallback: _kMono,
+      fontSize: core.fontSize,
+      height: _kLineH,
+    );
+
+    // Calculate left padding based on font size to replace the hardcoded string spaces
+    final indentWidth = (indent == 0 ? 2 : indent) * (core.fontSize * 0.6);
+
+    // 4. Wrap the Row inside a WidgetSpan
+    final spans = <InlineSpan>[
+      WidgetSpan(
+        alignment: PlaceholderAlignment.top,
+        child: Padding(
+          padding: EdgeInsets.only(left: indentWidth),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              RichText(
+                text: TextSpan(children: prefixSpans, style: baseStyle),
+              ),
+              Expanded(
+                child: RichText(
+                  text: TextSpan(children: contentSpans, style: baseStyle),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    ];
 
     // ── Recursive Loop for Subtasks ──
     final children =
         pool.values
             .where((c) => c.parentId == item.id && !seen.contains(c.id))
             .toList()
-          ..sort((a, b) => a.id.compareTo(b.id));
+          ..sort(
+            (a, b) => b.id.compareTo(a.id),
+          ); // Assuming you kept the descending sort fix
 
     for (var child in children) {
       spans.add(const TextSpan(text: '\n'));
@@ -411,7 +423,6 @@ class Renderer {
           parentBoards: parentBoards ?? item.boards,
           visited: seen,
           isArchive: isArchive,
-          // Forwarding exact profile values down to subtasks! 🔄
           showId: showId,
           showStatus: showStatus,
           showPriority: showPriority,
