@@ -4,6 +4,8 @@ import 'package:flutter/services.dart';
 
 import 'package:window_manager/window_manager.dart';
 import 'storage.dart';
+import 'themes/theme_model.dart';
+import 'themes/app_themes.dart';
 
 // Link the split files to this main library! 🔗
 part 'terminal_screen.dart';
@@ -13,20 +15,6 @@ part 'renderer.dart';
 
 // ─── Design tokens ────────────────────────────────────────────────────────────
 
-// Core Colors
-const cRed = Color.fromRGBO(224, 108, 117, 1);
-const cPurple = Color(0xFFC678DD);
-const cGreen = Color(0xFF98C379);
-const cBlue = Color(0xFF61AFEF);
-const cYellow = Color(0xFFE5C07B);
-const cDim = Color(0xFF5C6370);
-const cVeryDim = Color.fromARGB(255, 27, 27, 27);
-const cBlack = Color.fromARGB(255, 0, 0, 0);
-
-const _kBg = cBlack;
-const _kSurface = cBlack;
-const _kBorder = cVeryDim;
-const _kPrompt = cGreen;
 
 const _kMono = [
   'JetBrains Mono',
@@ -37,7 +25,6 @@ const _kMono = [
   'Consolas',
   'Courier New',
 ];
-const _kFontSize = 13.5;
 const _kLineH = 1.6;
 // ──────────────────────────────────────────────────────────────────────────────
 
@@ -61,32 +48,74 @@ void main() async {
   runApp(const TaskTerminal());
 }
 
-class TaskTerminal extends StatelessWidget {
+class TaskTerminal extends StatefulWidget {
   const TaskTerminal({super.key});
 
   @override
+  State<TaskTerminal> createState() => _TaskTerminalState();
+}
+
+class _TaskTerminalState extends State<TaskTerminal> {
+  final Core app = Core();
+  bool _initialized = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _initApp();
+  }
+
+  Future<void> _initApp() async {
+    await app.init();
+    if (mounted) {
+      setState(() {
+        _initialized = true;
+      });
+    }
+  }
+
+  @override
   Widget build(BuildContext context) {
-    return MaterialApp(
-      title: 'Aeraa',
-      theme: ThemeData(
-        scaffoldBackgroundColor: _kBg,
-        applyElevationOverlayColor: false,
-        textSelectionTheme: const TextSelectionThemeData(
-          cursorColor: Color.fromARGB(255, 255, 255, 255),
-          selectionHandleColor: Color.fromARGB(255, 255, 255, 255),
+    if (!_initialized) {
+      return const MaterialApp(
+        home: Scaffold(
+          backgroundColor: Color(0xFF000000),
+          body: SizedBox.shrink(),
         ),
-        textTheme: const TextTheme(
-          bodyMedium: TextStyle(
-            color: Color(0xFFBBBBBB),
-            fontFamily: 'JetBrains Mono',
-            fontFamilyFallback: _kMono,
-            fontSize: _kFontSize,
-            height: _kLineH,
+        debugShowCheckedModeBanner: false,
+      );
+    }
+    return ListenableBuilder(
+      listenable: app,
+      builder: (context, _) {
+        final theme = app.theme;
+        return MaterialApp(
+          title: 'Aeraa',
+          theme: ThemeData(
+            scaffoldBackgroundColor: theme.bg,
+            applyElevationOverlayColor: false,
+            scrollbarTheme: ScrollbarThemeData(
+              thumbColor: WidgetStateProperty.all(theme.border),
+            ),
+            textSelectionTheme: TextSelectionThemeData(
+              cursorColor: theme.prompt,
+              selectionHandleColor: theme.prompt,
+              selectionColor: theme.prompt.withOpacity(0.3),
+            ),
+            textTheme: TextTheme(
+              bodyMedium: TextStyle(
+                color: theme.textMain,
+                fontFamily: 'JetBrains Mono',
+                fontFamilyFallback: _kMono,
+                fontSize: app.fontSize,
+                height: _kLineH,
+              ),
+            ),
           ),
-        ),
-      ),
-      home: const TerminalScreen(),
-      debugShowCheckedModeBanner: false,
+          home: TerminalScreen(app: app),
+          debugShowCheckedModeBanner: false,
+        );
+      },
     );
   }
 }

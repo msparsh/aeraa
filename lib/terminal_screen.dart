@@ -5,14 +5,15 @@ part of 'main.dart';
 typedef TerminalNode = ({String? command, Widget? widget});
 
 class TerminalScreen extends StatefulWidget {
-  const TerminalScreen({super.key});
+  final Core app;
+  const TerminalScreen({super.key, required this.app});
 
   @override
   State<TerminalScreen> createState() => _TerminalScreenState();
 }
 
 class _TerminalScreenState extends State<TerminalScreen> {
-  final Core app = Core();
+  late final Core app = widget.app;
   late final Renderer tp = Renderer(app);
   final TextEditingController _cmdController = TextEditingController();
   final FocusNode _focusNode = FocusNode();
@@ -22,6 +23,7 @@ class _TerminalScreenState extends State<TerminalScreen> {
   final List<String> _cmdHistory = [];
   int _historyPos = 0;
   bool _isNavigating = false;
+  bool _hoveringTitleBar = false;
 
   static const _helpMenu = '''
 COMMAND REFERENCE
@@ -68,7 +70,6 @@ System
   }
 
   Future<void> _initializeTaskTerminal() async {
-    await app.init();
     try {
       await windowManager.setOpacity(app.opacity);
     } catch (_) {}
@@ -128,7 +129,7 @@ System
       widget: Text(
         msg,
         style: TextStyle(
-          color: isError ? const Color(0xFFE06C75) : const Color(0xFFCCCCCC),
+          color: isError ? app.theme.red : app.theme.textMain,
           fontFamily: 'JetBrains Mono',
           fontFamilyFallback: _kMono,
           fontSize: app.fontSize,
@@ -174,7 +175,7 @@ System
             fontFamilyFallback: _kMono,
             fontSize: app.fontSize,
             height: _kLineH,
-            color: const Color(0xFFCCCCCC),
+            color: app.theme.textMain,
           ),
           children: spans,
         ),
@@ -230,7 +231,7 @@ System
             TextSpan(
               text: '\$ ',
               style: TextStyle(
-                color: const Color.fromARGB(255, 255, 255, 255),
+                color: app.theme.prompt,
                 fontFamily: 'JetBrains Mono',
                 fontFamilyFallback: _kMono,
                 fontSize: app.fontSize,
@@ -240,7 +241,7 @@ System
             TextSpan(
               text: trimmed,
               style: TextStyle(
-                color: const Color(0xFFEEEEEE),
+                color: app.theme.textMain,
                 fontFamily: 'JetBrains Mono',
                 fontFamilyFallback: _kMono,
                 fontSize: app.fontSize,
@@ -454,7 +455,7 @@ System
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: _kBg,
+      backgroundColor: app.theme.bg,
       body: GestureDetector(
         onTap: () => _focusNode.requestFocus(),
         child: Stack(
@@ -467,7 +468,7 @@ System
                   // ── Output area ─────────────────────────────────────────────
                   Expanded(
                     child: Container(
-                      color: _kBg,
+                      color: app.theme.bg,
                       padding: const EdgeInsets.only(
                         left: 20,
                         right: 20,
@@ -511,6 +512,7 @@ System
                     onSubmitted: _submitCommand,
                     onKeyEvent: _handleKeyEvent,
                     fontSize: app.fontSize,
+                    theme: app.theme,
                   ),
                 ],
               ),
@@ -522,9 +524,20 @@ System
               left: 0,
               right: 0,
               height: kWindowCaptionHeight,
-              child: const WindowCaption(
-                brightness: Brightness.dark,
-                backgroundColor: Colors.transparent,
+              child: MouseRegion(
+                onEnter: (_) => setState(() => _hoveringTitleBar = true),
+                onExit: (_) => setState(() => _hoveringTitleBar = false),
+                child: AnimatedOpacity(
+                  duration: const Duration(milliseconds: 150),
+                  opacity: _hoveringTitleBar ? 1.0 : 0.25,
+                  child: WindowCaption(
+                    key: ValueKey(app.theme.name),
+                    brightness: ThemeData.estimateBrightnessForColor(
+                      app.theme.bg,
+                    ),
+                    backgroundColor: Colors.transparent,
+                  ),
+                ),
               ),
             ),
           ],
@@ -544,6 +557,7 @@ class _InputBar extends StatelessWidget {
   final KeyEventResult Function(FocusNode, KeyEvent) onKeyEvent;
 
   final double fontSize;
+  final TerminalTheme theme;
 
   const _InputBar({
     required this.cmdController,
@@ -553,14 +567,15 @@ class _InputBar extends StatelessWidget {
     required this.onSubmitted,
     required this.onKeyEvent,
     required this.fontSize,
+    required this.theme,
   });
 
   @override
   Widget build(BuildContext context) {
     return Container(
-      decoration: const BoxDecoration(
-        color: _kSurface,
-        border: Border(top: BorderSide(color: _kBorder, width: 1)),
+      decoration: BoxDecoration(
+        color: theme.surface,
+        border: Border(top: BorderSide(color: theme.border, width: 1)),
       ),
       padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
       child: Row(
@@ -570,7 +585,7 @@ class _InputBar extends StatelessWidget {
           Text(
             '\$',
             style: TextStyle(
-              color: _kPrompt,
+              color: theme.prompt,
               fontFamily: 'JetBrains Mono',
               fontFamilyFallback: _kMono,
               fontSize: fontSize + 1,
@@ -588,7 +603,7 @@ class _InputBar extends StatelessWidget {
                 autofocus: true,
                 cursorWidth: 2,
                 style: TextStyle(
-                  color: const Color(0xFFEEEEEE),
+                  color: theme.textMain,
                   fontFamily: 'JetBrains Mono',
                   fontFamilyFallback: _kMono,
                   fontSize: fontSize,

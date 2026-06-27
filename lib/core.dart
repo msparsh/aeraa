@@ -1,6 +1,6 @@
 part of 'main.dart';
 
-class Core {
+class Core extends ChangeNotifier {
   Map<int, TaskItem> items = {};
   Map<int, TaskItem> archive = {};
   Map<String, String> aliases = {};
@@ -10,6 +10,8 @@ class Core {
   Timer? _saveTimer;
 
   double fontSize = 13.5;
+  String activeThemeName = 'default';
+  TerminalTheme get theme => appThemes[activeThemeName] ?? appThemes['default']!;
   double opacity = 1.0;
   String defaultView = 'board';
   int historyLimit = 100;
@@ -36,6 +38,7 @@ class Core {
       if (data['settings'] != null) {
         final s = data['settings'] as Map;
         fontSize = (s['font_size'] as num?)?.toDouble() ?? 13.5;
+        activeThemeName = s['theme'] as String? ?? 'default';
         opacity = (s['opacity'] as num?)?.toDouble() ?? 1.0;
         defaultView = s['default'] as String? ?? 'board';
         historyLimit = s['history_limit'] as int? ?? 100;
@@ -46,16 +49,19 @@ class Core {
         history = List<String>.from(data['history'] as List);
       }
     }
+    notifyListeners();
   }
 
   void resetSettings() {
     fontSize = 13.5;
+    activeThemeName = 'default';
     opacity = 1.0;
     defaultView = 'board';
     historyLimit = 100;
     showGlobalAge = true;
     showGlobalTags = true;
     _save();
+    notifyListeners();
   }
 
   Map<int, TaskItem> _decodeMap(dynamic raw) {
@@ -86,6 +92,7 @@ class Core {
     'nextId': _nextId, // 👈 Save the exact next ID
     'settings': {
       'font_size': fontSize,
+      'theme': activeThemeName,
       'opacity': opacity,
       'default': defaultView,
       'history_limit': historyLimit,
@@ -750,6 +757,12 @@ class Core {
           '${fsPrefix}manage font_size <number>              : Set the terminal font size. '
           '${fsDiff ? '(current: $fontSize, default: 13.5)' : '(default: 13.5)'}';
 
+      final thDiff = activeThemeName != 'default';
+      final thPrefix = thDiff ? '* ' : '  ';
+      final thFormatted =
+          '${thPrefix}manage theme <name>                    : Set the terminal theme. '
+          '${thDiff ? '(current: $activeThemeName, default: default)' : '(default: default)'}';
+
       final opDiff = opacity != 1.0;
       final opPrefix = opDiff ? '* ' : '  ';
       final opFormatted =
@@ -773,6 +786,7 @@ class Core {
         msg:
             'ACTIVE CONFIGURATIONS & COMMANDS\n'
             '$fsFormatted\n'
+            '$thFormatted\n'
             '$opFormatted\n'
             '$dfFormatted\n'
             '$hlFormatted\n'
@@ -794,6 +808,7 @@ class Core {
       }
       fontSize = size;
       forceSaveImmediate();
+      notifyListeners();
       return (error: false, msg: 'Font size set to $size');
     } else if (sub == 'opacity') {
       if (args.length < 2) {
@@ -808,6 +823,7 @@ class Core {
       }
       opacity = op;
       forceSaveImmediate();
+      notifyListeners();
       return (error: false, msg: 'Opacity set to $op');
     } else if (sub == 'default') {
       if (args.length < 2) {
@@ -822,6 +838,7 @@ class Core {
       }
       defaultView = view;
       forceSaveImmediate();
+      notifyListeners();
       return (error: false, msg: 'Default view set to $view');
     } else if (sub == 'history_limit') {
       if (args.length < 2) {
@@ -836,13 +853,34 @@ class Core {
         history.removeAt(0);
       }
       forceSaveImmediate();
+      notifyListeners();
       return (error: false, msg: 'History limit set to $limit');
+    } else if (sub == 'theme') {
+      if (args.length < 2) {
+        return (
+          error: true,
+          msg:
+              'Usage: manage theme <name>. Options: ${appThemes.keys.join(", ")}'
+        );
+      }
+      final target = args[1].toLowerCase();
+      if (!appThemes.containsKey(target)) {
+        return (
+          error: true,
+          msg:
+              'Theme not found. Options: ${appThemes.keys.join(", ")}'
+        );
+      }
+      activeThemeName = target;
+      forceSaveImmediate();
+      notifyListeners();
+      return (error: false, msg: 'Theme set to ${appThemes[target]!.name}');
     }
 
     return (
       error: true,
       msg:
-          'Unknown manage option "$sub". Options are font_size, opacity, default, history_limit, reset.',
+          'Unknown manage option "$sub". Options are font_size, theme, opacity, default, history_limit, reset.',
     );
   }
 }

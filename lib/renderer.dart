@@ -16,7 +16,7 @@ class Renderer {
           fontFamilyFallback: _kMono,
           fontSize: core.fontSize,
           height: _kLineH,
-          color: const Color(0xFFCCCCCC),
+          color: core.theme.textMain,
         ),
         children: mainSpans,
       ),
@@ -36,7 +36,7 @@ class Renderer {
               fontFamilyFallback: _kMono,
               fontSize: core.fontSize - 1,
               height: 1.4,
-              color: cDim,
+              color: core.theme.dim,
             ),
             children: footerSpans,
           ),
@@ -85,11 +85,11 @@ class Renderer {
       spans.addAll([
         TextSpan(
           text: boardName,
-          style: const TextStyle(
-            color: Color(0xFFEEEEEE),
+          style: TextStyle(
+            color: core.theme.textMain,
             fontWeight: FontWeight.w600,
             decoration: TextDecoration.underline,
-            decorationColor: Color(0xFFEEEEEE),
+            decorationColor: core.theme.textMain,
             decorationStyle: TextDecorationStyle.solid,
             decorationThickness: 2,
             letterSpacing: 0.5,
@@ -97,7 +97,7 @@ class Renderer {
         ),
         TextSpan(
           text: '  [$doneCount/${tasks.length}]\n',
-          style: const TextStyle(color: cDim),
+          style: TextStyle(color: core.theme.dim),
         ),
       ]);
 
@@ -118,39 +118,39 @@ class Renderer {
     final footerSpans = <InlineSpan>[
       TextSpan(
         text: '${stats.percent}% of all tasks complete.\n',
-        style: const TextStyle(color: cDim),
+        style: TextStyle(color: core.theme.dim),
       ),
       TextSpan(
         text: '${stats.complete}',
-        style: const TextStyle(color: cGreen),
+        style: TextStyle(color: core.theme.green),
       ),
-      const TextSpan(
+      TextSpan(
         text: ' done · ',
-        style: TextStyle(color: cDim),
+        style: TextStyle(color: core.theme.dim),
       ),
       TextSpan(
         text: '${stats.inProgress}',
-        style: const TextStyle(color: cYellow),
+        style: TextStyle(color: core.theme.yellow),
       ),
-      const TextSpan(
+      TextSpan(
         text: ' started · ',
-        style: TextStyle(color: cDim),
+        style: TextStyle(color: core.theme.dim),
       ),
       TextSpan(
         text: '${stats.pending}',
-        style: const TextStyle(color: cPurple),
+        style: TextStyle(color: core.theme.purple),
       ),
-      const TextSpan(
+      TextSpan(
         text: ' pending · ',
-        style: TextStyle(color: cDim),
+        style: TextStyle(color: core.theme.dim),
       ),
       TextSpan(
         text: '${stats.notes}',
-        style: const TextStyle(color: cBlue),
+        style: TextStyle(color: core.theme.blue),
       ),
-      const TextSpan(
+      TextSpan(
         text: ' notes',
-        style: TextStyle(color: cDim),
+        style: TextStyle(color: core.theme.dim),
       ),
     ];
     return _buildRichText(spans, footerSpans: footerSpans);
@@ -159,10 +159,10 @@ class Renderer {
   Widget getTimelineView() {
     final groups = _groupByDate();
     final spans = <InlineSpan>[
-      const TextSpan(
+      TextSpan(
         text: 'TIMELINE\n',
         style: TextStyle(
-          color: Color(0xFFEEEEEE),
+          color: core.theme.textMain,
           fontWeight: FontWeight.w600,
           letterSpacing: 1.5,
         ),
@@ -174,7 +174,7 @@ class Renderer {
       spans.add(
         TextSpan(
           text: '\n$date\n',
-          style: const TextStyle(color: cDim, letterSpacing: 0.5),
+          style: TextStyle(color: core.theme.dim, letterSpacing: 0.5),
         ),
       );
       for (var it in groups[date]!) {
@@ -198,7 +198,7 @@ class Renderer {
       return Text(
         'Archive is empty.',
         style: TextStyle(
-          color: cDim,
+          color: core.theme.dim,
           fontFamily: 'JetBrains Mono',
           fontFamilyFallback: _kMono,
           fontSize: core.fontSize,
@@ -207,10 +207,10 @@ class Renderer {
     }
 
     final spans = <InlineSpan>[
-      const TextSpan(
+      TextSpan(
         text: 'ARCHIVED ITEMS\n',
         style: TextStyle(
-          color: Color(0xFFEEEEEE),
+          color: core.theme.textMain,
           fontWeight: FontWeight.w600,
           letterSpacing: 1.5,
         ),
@@ -260,34 +260,34 @@ class Renderer {
     final pool = isArchive ? core.archive : core.items;
 
     String prefix = '•';
-    Color pColor = cBlue;
-    TextStyle dStyle = const TextStyle(color: Color(0xFFDADADA));
+    Color pColor = core.theme.blue;
+    TextStyle dStyle = TextStyle(color: core.theme.textMain);
 
     if (item.isTask) {
       if (item.isComplete) {
         prefix = '✓';
-        pColor = cGreen;
-        dStyle = const TextStyle(color: cDim);
+        pColor = core.theme.green;
+        dStyle = TextStyle(color: core.theme.dim);
       } else if (item.inProgress) {
         prefix = '≡';
-        pColor = cYellow;
+        pColor = core.theme.yellow;
       } else {
         prefix = '☐';
-        pColor = cPurple;
+        pColor = core.theme.purple;
       }
 
       if (!item.isComplete && item.priority == 3) {
-        dStyle = const TextStyle(
-          color: cYellow,
+        dStyle = TextStyle(
+          color: core.theme.yellow,
           decoration: TextDecoration.underline,
         );
       }
     } else {
-      dStyle = const TextStyle(color: cDim);
+      dStyle = TextStyle(color: core.theme.dim);
     }
 
     if (isArchive) {
-      dStyle = const TextStyle(color: cDim);
+      dStyle = TextStyle(color: core.theme.dim);
     }
 
     final spacing = ' ' * (indent == 0 ? 2 : indent);
@@ -298,7 +298,7 @@ class Renderer {
       spans.add(
         TextSpan(
           text: '${item.id}.',
-          style: const TextStyle(color: cDim),
+          style: TextStyle(color: core.theme.dim),
         ),
       );
     }
@@ -320,9 +320,9 @@ class Renderer {
     if (item.isTask && !item.isComplete) {
       if (showPriority && item.priority >= 2) {
         spans.add(
-          const TextSpan(
+          TextSpan(
             text: ' (!)',
-            style: TextStyle(color: cYellow),
+            style: TextStyle(color: core.theme.yellow),
           ),
         );
       }
@@ -333,11 +333,11 @@ class Renderer {
         final todayStr =
             '${now.day.toString().padLeft(2, '0')}-${now.month.toString().padLeft(2, '0')}-${now.year}';
 
-        Color dueColor = cDim;
+        Color dueColor = core.theme.dim;
         if (_isOverdue(item.dueDate!)) {
-          dueColor = cRed;
+          dueColor = core.theme.red;
         } else if (item.dueDate == todayStr) {
-          dueColor = cYellow;
+          dueColor = core.theme.yellow;
         }
 
         spans.add(
@@ -356,7 +356,7 @@ class Renderer {
         spans.add(
           TextSpan(
             text: ' ${age}d',
-            style: const TextStyle(color: cDim),
+            style: TextStyle(color: core.theme.dim),
           ),
         );
       }
@@ -365,9 +365,9 @@ class Renderer {
     // 7. ⭐ Star Badge Element
     if (showStar && item.isStarred) {
       spans.add(
-        const TextSpan(
+        TextSpan(
           text: ' ★',
-          style: TextStyle(color: cYellow),
+          style: TextStyle(color: core.theme.yellow),
         ),
       );
     }
@@ -377,7 +377,7 @@ class Renderer {
       spans.add(
         TextSpan(
           text: '  ${item.tags.join(' ')}',
-          style: const TextStyle(color: cDim),
+          style: TextStyle(color: core.theme.dim),
         ),
       );
     }
@@ -390,7 +390,7 @@ class Renderer {
       spans.add(
         TextSpan(
           text: '  $displayBoards',
-          style: const TextStyle(color: cPurple),
+          style: TextStyle(color: core.theme.purple),
         ),
       );
     }
