@@ -169,7 +169,7 @@ class Renderer {
       ),
     ];
 
-    final sortedDates = groups.keys.toList()..sort();
+    final sortedDates = groups.keys.toList()..sort((a, b) => b.compareTo(a));
     for (var date in sortedDates) {
       spans.add(
         TextSpan(
@@ -450,12 +450,16 @@ class Renderer {
 
   Map<String, List<TaskItem>> _groupByDate() {
     final groups = <String, List<TaskItem>>{};
-    for (var it in core.items.values) {
+
+    // Combine active items and archive items
+    final allItems = [...core.items.values, ...core.archive.values];
+
+    for (var it in allItems) {
       if (it.parentId != null) continue;
       groups.putIfAbsent(it.dateString, () => []).add(it);
     }
     for (var d in groups.keys) {
-      groups[d]!.sort((a, b) => a.id.compareTo(b.id));
+      groups[d]!.sort((a, b) => b.id.compareTo(a.id));
     }
     return groups;
   }

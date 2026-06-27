@@ -529,7 +529,7 @@ System
                 onExit: (_) => setState(() => _hoveringTitleBar = false),
                 child: AnimatedOpacity(
                   duration: const Duration(milliseconds: 150),
-                  opacity: _hoveringTitleBar ? 1.0 : 0.25,
+                  opacity: _hoveringTitleBar ? 1.0 : 0,
                   child: WindowCaption(
                     key: ValueKey(app.theme.name),
                     brightness: ThemeData.estimateBrightnessForColor(
