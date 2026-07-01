@@ -174,7 +174,7 @@ class Renderer {
       spans.add(
         TextSpan(
           text: '\n$date\n',
-          style: TextStyle(color: core.theme.dim, letterSpacing: 0.5),
+          style: TextStyle(color: core.theme.textMain, letterSpacing: 0.5),
         ),
       );
       for (var it in groups[date]!) {
@@ -470,7 +470,7 @@ class Renderer {
       groups.putIfAbsent(it.dateString, () => []).add(it);
     }
     for (var d in groups.keys) {
-      groups[d]!.sort((a, b) => b.id.compareTo(a.id));
+      groups[d]!.sort((a, b) => a.id.compareTo(b.id));
     }
     return groups;
   }
