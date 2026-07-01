@@ -1,7 +1,7 @@
 name: aeraa
 description: "A new Flutter project."
 publish_to: 'none'
-version: 3.3.0+1
+version: 3.3.2+1
 
 environment:
   sdk: ^3.12.2
@@ -33,5 +33,5 @@ flutter_launcher_icons:
   windows:
     generate: true
     image_path: "assets/images/app_icon.png" # Path to your source icon
-    icon_size: 48 # Optional: Default is 48
+    icon_size: 256 # Optional: Default is 48
   image_path: "assets/images/app_icon.png"
