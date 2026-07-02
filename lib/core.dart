@@ -11,7 +11,8 @@ class Core extends ChangeNotifier {
 
   double fontSize = 13.5;
   String activeThemeName = 'default';
-  TerminalTheme get theme => appThemes[activeThemeName] ?? appThemes['default']!;
+  TerminalTheme get theme =>
+      appThemes[activeThemeName] ?? appThemes['default']!;
   double opacity = 1.0;
   String defaultView = 'board';
   int historyLimit = 100;
@@ -147,7 +148,8 @@ class Core extends ChangeNotifier {
     for (var t in args) {
       final lower = t.toLowerCase();
       if (t.startsWith('@') && t.length > 1) {
-        boards.add(t);
+        final cleanBoard = lower == '@inbox' ? 'inbox' : lower;
+        boards.add(cleanBoard);
       } else if (lower.startsWith('#') && t.length > 1) {
         tags.add(lower);
       } else if (lower.startsWith('p:') && t.length == 3) {
@@ -860,15 +862,14 @@ class Core extends ChangeNotifier {
         return (
           error: true,
           msg:
-              'Usage: manage theme <name>. Options: ${appThemes.keys.join(", ")}'
+              'Usage: manage theme <name>. Options: ${appThemes.keys.join(", ")}',
         );
       }
       final target = args[1].toLowerCase();
       if (!appThemes.containsKey(target)) {
         return (
           error: true,
-          msg:
-              'Theme not found. Options: ${appThemes.keys.join(", ")}'
+          msg: 'Theme not found. Options: ${appThemes.keys.join(", ")}',
         );
       }
       activeThemeName = target;

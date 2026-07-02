@@ -456,7 +456,8 @@ class Renderer {
     for (var b in groups.keys) {
       groups[b]!.sort((a, b) => a.id.compareTo(b.id));
     }
-    return groups;
+    final sortedKeys = groups.keys.toList()..sort();
+    return {for (var k in sortedKeys) k: groups[k]!};
   }
 
   Map<String, List<TaskItem>> _groupByDate() {
